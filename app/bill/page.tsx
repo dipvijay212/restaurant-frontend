@@ -67,7 +67,7 @@ export default function BillPage() {
           setPaymentTxnRef('CF-TXN-84920194');
         }
 
-        const myOrders = orders.filter((o) => o.tableNumber === tableNumber);
+        const myOrders = orders.filter((o: Order) => o.tableNumber === tableNumber);
         setSessionOrders(myOrders);
       } catch (err) {
         console.error(err);

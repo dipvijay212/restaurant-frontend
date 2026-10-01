@@ -3,9 +3,8 @@
 import React, { useState } from 'react';
 import { Bill } from '../../types/bill';
 import { Button } from '../ui/Button';
-import { FormInput } from '../ui/FormInput';
 import { billsApi } from '../../lib/api/bills';
-import { PlusCircle, X, Receipt, Calculator } from 'lucide-react';
+import { X, Calculator } from 'lucide-react';
 
 export interface GenerateBillModalProps {
   isOpen: boolean;
@@ -40,7 +39,7 @@ export const GenerateBillModal: React.FC<GenerateBillModalProps> = ({
       onClose();
     } catch (err) {
       console.error(err);
-    } finally {
+    } fontFinally: {
       setLoading(false);
     }
   };
@@ -67,41 +66,53 @@ export const GenerateBillModal: React.FC<GenerateBillModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <FormInput
-            label="Table Number"
-            type="number"
-            min={1}
-            value={tableNumber}
-            onChange={(e) => setTableNumber(Number(e.target.value))}
-            required
-          />
+          <div>
+            <label className="block text-xs font-bold text-stone-700 mb-1">Table Number</label>
+            <input
+              type="number"
+              min={1}
+              value={tableNumber}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTableNumber(Number(e.target.value))}
+              required
+              className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900 focus:outline-none focus:border-amber-500"
+            />
+          </div>
 
-          <FormInput
-            label="Guest Customer Name"
-            type="text"
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            required
-          />
+          <div>
+            <label className="block text-xs font-bold text-stone-700 mb-1">Guest Customer Name</label>
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerName(e.target.value)}
+              required
+              className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900 focus:outline-none focus:border-amber-500"
+            />
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <FormInput
-              label="Discount ($)"
-              type="number"
-              min={0}
-              step="0.01"
-              value={discountAmount}
-              onChange={(e) => setDiscountAmount(Number(e.target.value))}
-            />
+            <div>
+              <label className="block text-xs font-bold text-stone-700 mb-1">Discount ($)</label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={discountAmount}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiscountAmount(Number(e.target.value))}
+                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900 focus:outline-none focus:border-amber-500"
+              />
+            </div>
 
-            <FormInput
-              label="Tip ($)"
-              type="number"
-              min={0}
-              step="0.01"
-              value={tipAmount}
-              onChange={(e) => setTipAmount(Number(e.target.value))}
-            />
+            <div>
+              <label className="block text-xs font-bold text-stone-700 mb-1">Tip ($)</label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={tipAmount}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTipAmount(Number(e.target.value))}
+                className="w-full px-3.5 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs font-bold text-stone-900 focus:outline-none focus:border-amber-500"
+              />
+            </div>
           </div>
 
           <div className="pt-4 border-t border-stone-200 flex justify-end gap-2">
