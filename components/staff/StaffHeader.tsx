@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Users, Grid, Bell, ShoppingBag, Receipt, ArrowLeft, LogOut } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { logoutUser } from '../../store/slices/authSlice';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export interface StaffHeaderProps {
   pendingRequestsCount?: number;
@@ -110,6 +111,9 @@ export const StaffHeader: React.FC<StaffHeaderProps> = ({
               );
             })}
           </nav>
+
+          {/* Notification Center */}
+          <NotificationBell audience="admin_staff" className="text-stone-300" />
 
           {/* User Info & Logout */}
           <div className="flex items-center gap-2 pl-2 border-l border-stone-800">

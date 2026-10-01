@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { ShoppingBag, BellRing } from 'lucide-react';
 import { useAppSelector } from '../../store';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export const CustomerHeader: React.FC = () => {
   const cartItems = useAppSelector((state) => state.cart.items);
@@ -27,6 +28,8 @@ export const CustomerHeader: React.FC = () => {
         </Link>
 
         <div className="flex items-center gap-3">
+          <NotificationBell audience="customer" />
+
           <Link
             href="/requests"
             className="p-2 text-stone-600 hover:text-stone-900 rounded-lg hover:bg-stone-100 transition-colors"

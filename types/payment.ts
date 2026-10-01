@@ -1,23 +1,48 @@
-export type PaymentMethod = 'cash' | 'counter' | 'upi' | 'card' | 'online' | 'apple_pay';
+export type PaymentMethod =
+  | 'cashfree'
+  | 'online'
+  | 'card'
+  | 'upi'
+  | 'cash'
+  | 'counter'
+  | 'apple_pay'
+  | 'Cashfree Online'
+  | 'Credit/Debit Card'
+  | 'UPI / QR'
+  | 'Cash at Counter';
+
 export type PaymentStatus =
-  | 'unpaid'
+  | 'PROCESSING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'REFUNDED'
   | 'processing'
-  | 'completed'
+  | 'success'
   | 'successful'
+  | 'completed'
   | 'failed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'refunded'
+  | 'unpaid';
 
 export interface PaymentTransaction {
   id: string;
+  transactionRef: string;
   billId: string;
+  billNumber?: string;
   orderId?: string;
   tableNumber: number;
+  customerName?: string;
   amount: number;
   method: PaymentMethod;
   status: PaymentStatus;
-  transactionRef?: string;
   errorMessage?: string;
+  gatewayName?: string;
+  gatewayOrderId?: string;
+  gatewayPaymentId?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export type Payment = PaymentTransaction;

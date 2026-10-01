@@ -1,21 +1,10 @@
-import { Payment, PaymentMethod, PaymentStatus } from '../../types/payment';
+import { initialPaymentsData } from '../../mock/payments';
+import { PaymentTransaction, PaymentMethod, PaymentStatus } from '../../types/payment';
 import { billsApi } from './bills';
 
-const delay = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
 
-let paymentsState: Payment[] = [
-  {
-    id: 'pay-01',
-    billId: 'bill-104',
-    orderId: 'ord-104',
-    tableNumber: 10,
-    amount: 29.51,
-    method: 'card',
-    status: 'completed',
-    transactionRef: 'TXN-98412389',
-    createdAt: '2026-10-01T14:15:00Z',
-  }
-];
+let paymentsState: PaymentTransaction[] = [...initialPaymentsData];
 
 export interface PaymentGatewayRequest {
   billId: string;
@@ -31,34 +20,74 @@ export interface PaymentGatewayResponse {
   success: boolean;
   status: PaymentStatus;
   transactionRef?: string;
-  payment?: Payment;
+  payment?: PaymentTransaction;
   errorMessage?: string;
 }
 
-/**
- * Extensible Payment Gateway Adapter interface.
- * Can be swapped with Cashfree SDK / Cashfree API client seamlessly in the future.
- */
 export const paymentsApi = {
-  getPayments: async (): Promise<Payment[]> => {
-    await delay(150);
+  getPayments: async (): Promise<PaymentTransaction[]> => {
+    await delay();
     return [...paymentsState];
+  },
+
+  getPaymentById: async (id: string): Promise<PaymentTransaction | null> => {
+    await delay();
+    const p = paymentsState.find((x) => x.id === id);
+    return p ? { ...p } : null;
+  },
+
+  updatePaymentStatus: async (id: string, status: PaymentStatus): Promise<PaymentTransaction> => {
+    await delay();
+    const index = paymentsState.findIndex((p) => p.id === id);
+    if (index === -1) throw new Error('Transaction not found');
+
+    const updated = {
+      ...paymentsState[index],
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    paymentsState[index] = updated;
+
+    // Sync bill status if marked SUCCESS or REFUNDED
+    if (status === 'SUCCESS' || status === 'success') {
+      await billsApi.updateBillStatus(updated.billId, 'paid', updated.amount, updated.method);
+    } else if (status === 'REFUNDED' || status === 'refunded') {
+      await billsApi.updateBillStatus(updated.billId, 'unpaid', 0, updated.method);
+    }
+
+    return updated;
+  },
+
+  refundPayment: async (id: string, refundAmount?: number, reason?: string): Promise<PaymentTransaction> => {
+    await delay(300);
+    const index = paymentsState.findIndex((p) => p.id === id);
+    if (index === -1) throw new Error('Transaction not found');
+
+    const updated: PaymentTransaction = {
+      ...paymentsState[index],
+      status: 'REFUNDED',
+      errorMessage: reason ? `Refund Reason: ${reason}` : 'Refund processed by Admin',
+      updatedAt: new Date().toISOString(),
+    };
+    paymentsState[index] = updated;
+
+    await billsApi.updateBillStatus(updated.billId, 'unpaid', 0, updated.method);
+    return updated;
   },
 
   /**
    * Process payment (Online or Counter).
-   * For online payment, outcome can be simulated as 'success', 'failed', or 'cancelled'.
    */
   processPayment: async (
     req: PaymentGatewayRequest,
     simulateOutcome: 'success' | 'failed' | 'cancelled' = 'success'
   ): Promise<PaymentGatewayResponse> => {
-    await delay(1000); // Simulate network gateway roundtrip
+    await delay(400);
 
     if (simulateOutcome === 'cancelled') {
       return {
         success: false,
-        status: 'cancelled',
+        status: 'CANCELLED',
         errorMessage: 'Payment was cancelled by the user.',
       };
     }
@@ -66,33 +95,36 @@ export const paymentsApi = {
     if (simulateOutcome === 'failed') {
       return {
         success: false,
-        status: 'failed',
+        status: 'FAILED',
         errorMessage: 'Transaction declined by bank/gateway. Please check card or UPI credentials.',
       };
     }
 
-    // Success branch
     const txnRef = `CF-TXN-${Math.floor(10000000 + Math.random() * 90000000)}`;
-    const newPayment: Payment = {
+    const newPayment: PaymentTransaction = {
       id: `pay-${Date.now()}`,
+      transactionRef: txnRef,
       billId: req.billId,
+      billNumber: `INV-${Date.now().toString().slice(-6)}`,
       orderId: req.orderId,
       tableNumber: req.tableNumber,
+      customerName: req.customerName || 'Dining Guest',
       amount: req.amount,
       method: req.method,
-      status: 'completed',
-      transactionRef: txnRef,
+      status: 'SUCCESS',
+      gatewayName: 'Cashfree Payment Gateway Adapter',
+      gatewayOrderId: `order_cf_${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
 
     paymentsState.unshift(newPayment);
 
     // Synchronize Bill status to paid upon verified gateway success
-    await billsApi.updateBillStatus(req.billId, 'paid', req.amount);
+    await billsApi.updateBillStatus(req.billId, 'paid', req.amount, req.method);
 
     return {
       success: true,
-      status: 'successful',
+      status: 'SUCCESS',
       transactionRef: txnRef,
       payment: newPayment,
     };

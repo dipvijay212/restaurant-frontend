@@ -6,6 +6,7 @@ import { Menu, Bell, Search, User, LogOut } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { toggleSidebar, setSearchQuery } from '../../store/slices/adminUiSlice';
 import { logoutUser } from '../../store/slices/authSlice';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export const AdminHeader: React.FC = () => {
   const router = useRouter();
@@ -42,12 +43,7 @@ export const AdminHeader: React.FC = () => {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="relative p-2 text-stone-600 hover:text-stone-900 rounded-xl hover:bg-stone-100 transition-colors">
-          <Bell className="w-5 h-5" />
-          {unreadCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 rounded-full ring-2 ring-white" />
-          )}
-        </button>
+        <NotificationBell audience="admin_staff" />
 
         <div className="flex items-center gap-3 pl-3 border-l border-stone-200">
           <div className="w-9 h-9 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-sm overflow-hidden">

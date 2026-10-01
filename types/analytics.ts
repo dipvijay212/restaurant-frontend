@@ -1,33 +1,73 @@
-export interface HourlySales {
+export interface DailySalesData {
+  date: string;
+  dayLabel: string;
+  revenue: number;
+  ordersCount: number;
+}
+
+export interface HourlySalesData {
   hour: string;
   revenue: number;
   ordersCount: number;
 }
 
-export interface CategorySales {
+export interface CategorySalesData {
   categoryName: string;
   revenue: number;
+  ordersCount: number;
   percentage: number;
 }
 
-export interface PopularItem {
+export interface ProductPerformance {
   id: string;
   name: string;
   category: string;
-  totalQuantity: number;
+  quantitySold: number;
+  revenue: number;
+  price: number;
+  totalRevenue?: number;
+  totalQuantity?: number;
+}
+
+export interface TablePerformance {
+  tableNumber: number;
+  sessionCount: number;
+  averageDurationMinutes: number;
   totalRevenue: number;
+  occupancyRate: number;
 }
 
 export interface AnalyticsSummary {
+  // Overview
+  totalRevenue: number;
   todayRevenue: number;
   revenueGrowth: number;
+  totalOrders: number;
   todayOrders: number;
   ordersGrowth: number;
-  activeTablesCount: number;
-  occupancyRate: number;
   averageOrderValue: number;
   averagePrepTimeMinutes: number;
-  hourlySales: HourlySales[];
-  categorySales: CategorySales[];
-  popularItems: PopularItem[];
+  averageTableTimeMinutes: number;
+  cancelledOrdersCount: number;
+  cancelledOrdersPercentage: number;
+
+  // Operations
+  averageOrderToKitchenMinutes: number;
+  averageOccupancyRatePercentage: number;
+  occupancyRate: number;
+  delayedOrdersCount: number;
+  delayedOrdersPercentage: number;
+
+  // Sales Data
+  dailySales: DailySalesData[];
+  hourlySales: HourlySalesData[];
+  categorySales: CategorySalesData[];
+
+  // Products Data
+  bestSellingProducts: ProductPerformance[];
+  popularItems: ProductPerformance[];
+  lowSellingProducts: ProductPerformance[];
+
+  // Tables Data
+  tablePerformance: TablePerformance[];
 }

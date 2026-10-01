@@ -1,5 +1,5 @@
 /**
- * Utility for playing synthesized Web Audio API sound alerts in KDS without external assets.
+ * Utility for playing synthesized Web Audio API sound alerts without external assets.
  */
 export function playKitchenChime(type: 'new_order' | 'status_change' | 'delayed_alert' = 'status_change') {
   try {
@@ -59,5 +59,23 @@ export function playKitchenChime(type: 'new_order' | 'status_change' | 'delayed_
     }
   } catch (err) {
     console.warn('Audio chime playback omitted:', err);
+  }
+}
+
+export function playNotificationSound(type: 'new_order' | 'request' | 'bill' | 'delayed' | 'payment' | 'status_change') {
+  switch (type) {
+    case 'new_order':
+      playKitchenChime('new_order');
+      break;
+    case 'delayed':
+      playKitchenChime('delayed_alert');
+      break;
+    case 'request':
+    case 'bill':
+    case 'payment':
+    case 'status_change':
+    default:
+      playKitchenChime('status_change');
+      break;
   }
 }

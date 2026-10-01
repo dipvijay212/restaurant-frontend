@@ -330,8 +330,8 @@ export default function AdminDashboardPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="font-extrabold text-stone-900 block">{formatCurrency(item.totalRevenue)}</span>
-                    <span className="text-[10px] text-amber-800 font-medium block">{item.totalQuantity} sold</span>
+                    <span className="font-extrabold text-stone-900 block">{formatCurrency(item.totalRevenue || item.revenue)}</span>
+                    <span className="text-[10px] text-amber-800 font-medium block">{item.totalQuantity || item.quantitySold} sold</span>
                   </div>
                 </div>
               ))}
