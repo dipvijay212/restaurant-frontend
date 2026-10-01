@@ -1,0 +1,56 @@
+import { StaffMember } from '../types/staff';
+
+export const initialStaffData: StaffMember[] = [
+  {
+    id: 'stf-01',
+    name: 'Marco Rossi',
+    role: 'manager',
+    email: 'marco@demorestaurant.com',
+    phone: '+1 (415) 555-9011',
+    shiftStatus: 'on_duty',
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+    joinedDate: '2024-01-15',
+  },
+  {
+    id: 'stf-02',
+    name: 'Giovanni Silva',
+    role: 'chef',
+    email: 'giovanni@demorestaurant.com',
+    phone: '+1 (415) 555-9012',
+    shiftStatus: 'on_duty',
+    avatarUrl: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=200&auto=format&fit=crop&q=80',
+    joinedDate: '2024-02-01',
+  },
+  {
+    id: 'stf-03',
+    name: 'Emma Watson',
+    role: 'waiter',
+    email: 'emma@demorestaurant.com',
+    phone: '+1 (415) 555-9013',
+    shiftStatus: 'on_duty',
+    avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&auto=format&fit=crop&q=80',
+    assignedTables: [1, 2, 3, 4],
+    joinedDate: '2025-05-10',
+  },
+  {
+    id: 'stf-04',
+    name: 'Carlos Ruiz',
+    role: 'waiter',
+    email: 'carlos@demorestaurant.com',
+    phone: '+1 (415) 555-9014',
+    shiftStatus: 'on_duty',
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
+    assignedTables: [5, 6, 7, 8],
+    joinedDate: '2025-06-20',
+  },
+  {
+    id: 'stf-05',
+    name: 'Jessica Alba',
+    role: 'cashier',
+    email: 'jessica@demorestaurant.com',
+    phone: '+1 (415) 555-9015',
+    shiftStatus: 'on_duty',
+    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80',
+    joinedDate: '2025-08-01',
+  }
+];
