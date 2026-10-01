@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
 import { restaurantApi } from '../../../lib/api/restaurant';
 import { RestaurantConfig, DaySchedule } from '../../../types/restaurant';
 import { Button } from '../../../components/ui/Button';
+import { SettingsSkeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { useToast } from '../../../components/ui/ToastProvider';
 import { 
   Save, 
   Store, 
@@ -27,34 +30,32 @@ import {
 type SectionId = 'info' | 'hours' | 'tax' | 'orders' | 'payments' | 'notifications' | 'qr';
 
 export default function AdminSettingsPage() {
+  const toast = useToast();
   const [restaurant, setRestaurant] = useState<RestaurantConfig | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [regeneratingQR, setRegeneratingQR] = useState(false);
+  const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionId>('info');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        setLoading(true);
-        const data = await restaurantApi.getRestaurantInfo();
-        setRestaurant(data);
-      } catch (err) {
-        console.error('Failed to load restaurant settings:', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadRestaurantSettings = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await restaurantApi.getRestaurantInfo();
+      setRestaurant(data);
+    } catch (err: any) {
+      console.error('Failed to load restaurant settings:', err);
+      setError(err?.message || 'Unable to load restaurant settings. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    load();
   }, []);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 4000);
-  };
+  useEffect(() => {
+    loadRestaurantSettings();
+  }, [loadRestaurantSettings]);
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -63,22 +64,17 @@ export default function AdminSettingsPage() {
       setSaving(true);
       const updated = await restaurantApi.updateRestaurantInfo(restaurant);
       setRestaurant(updated);
-      showToast('Settings saved successfully!');
-    } catch (err) {
+      toast.success('Restaurant settings saved successfully!');
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to save settings');
+      toast.error(err?.message || 'Failed to save settings');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRegenerateQR = async () => {
+  const executeRegenerateQR = async () => {
     if (!restaurant) return;
-    const confirmRegen = window.confirm(
-      'Are you sure you want to regenerate all QR code tokens? Existing physical tabletop QR codes will need to be re-printed.'
-    );
-    if (!confirmRegen) return;
-
     try {
       setRegeneratingQR(true);
       const res = await restaurantApi.regenerateQRCodes();
@@ -91,11 +87,12 @@ export default function AdminSettingsPage() {
             lastRegeneratedAt: res.regeneratedAt,
           }
         });
-        showToast('QR Code security tokens successfully regenerated!');
+        toast.success('QR Code security tokens successfully regenerated!');
+        setIsRegenerateConfirmOpen(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to regenerate QR codes');
+      toast.error(err?.message || 'Failed to regenerate QR codes');
     } finally {
       setRegeneratingQR(false);
     }
@@ -117,8 +114,31 @@ export default function AdminSettingsPage() {
     });
   };
 
-  if (loading || !restaurant) {
-    return <LoadingSpinner label="Loading restaurant settings..." />;
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto">
+        <PageHeader 
+          title="Restaurant Settings" 
+          subtitle="Manage restaurant identity, operations, tax, payment gateways, and QR parameters."
+        />
+        <SettingsSkeleton />
+      </div>
+    );
+  }
+
+  if (error || !restaurant) {
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto">
+        <PageHeader 
+          title="Restaurant Settings" 
+          subtitle="Manage restaurant identity, operations, tax, payment gateways, and QR parameters."
+        />
+        <ErrorState
+          error={error || 'Unable to load restaurant configuration.'}
+          onRetry={loadRestaurantSettings}
+        />
+      </div>
+    );
   }
 
   const sections = [
@@ -133,13 +153,6 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="space-y-6 pb-12 max-w-7xl mx-auto">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-stone-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-stone-700 animate-in fade-in slide-in-from-bottom-5">
-          <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-          <span className="text-sm font-medium">{toastMessage}</span>
-        </div>
-      )}
 
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -943,7 +956,7 @@ export default function AdminSettingsPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={handleRegenerateQR}
+                    onClick={() => setIsRegenerateConfirmOpen(true)}
                     isLoading={regeneratingQR}
                     className="bg-stone-800 border-stone-700 text-white hover:bg-stone-700 text-xs py-2 px-4"
                   >
@@ -962,6 +975,19 @@ export default function AdminSettingsPage() {
 
         </div>
       </div>
+
+      {/* Confirm Regenerate QR Dialog */}
+      <ConfirmDialog
+        isOpen={isRegenerateConfirmOpen}
+        title="Regenerate All Table QR Codes"
+        message="Are you sure you want to regenerate all QR code security tokens? This will immediately invalidate all existing tabletop QR codes and require new QR codes to be printed for every table."
+        confirmLabel="Regenerate All QR Tokens"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={regeneratingQR}
+        onCancel={() => setIsRegenerateConfirmOpen(false)}
+        onConfirm={executeRegenerateQR}
+      />
     </div>
   );
 }

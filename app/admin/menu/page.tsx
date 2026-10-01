@@ -2,12 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
+import { TableSkeleton } from '../../../components/ui/Skeleton';
 import { ErrorState } from '../../../components/shared/ErrorState';
 import { Button } from '../../../components/ui/Button';
 import { Modal } from '../../../components/ui/Modal';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
-import { Toast } from '../../../components/ui/Toast';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { useToast } from '../../../components/ui/ToastProvider';
 import { menuApi } from '../../../lib/api/menu';
 import { Category, MenuItem, ProductVariant, ProductAddon } from '../../../types/menu';
 import { formatCurrency } from '../../../lib/utils';
@@ -31,11 +32,13 @@ import {
   Search,
   Filter,
   DollarSign,
+  RefreshCw,
 } from 'lucide-react';
 
 type MenuTab = 'categories' | 'products' | 'variants' | 'addons';
 
 export default function AdminMenuPage() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<MenuTab>('products');
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<MenuItem[]>([]);
@@ -44,7 +47,6 @@ export default function AdminMenuPage() {
 
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [toast, setToast] = useState<{ title: string; message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Modals state
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -59,7 +61,12 @@ export default function AdminMenuPage() {
   const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
   const [editingAddon, setEditingAddon] = useState<{ product: MenuItem; addon?: ProductAddon } | null>(null);
 
-  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'product' | 'category'; id: string; name: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: 'product' | 'category' | 'variant' | 'addon';
+    id: string;
+    name: string;
+    prod?: MenuItem;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Form Fields - Category
@@ -144,7 +151,7 @@ export default function AdminMenuPage() {
           iconName: catIcon,
           isActive: catIsActive,
         });
-        setToast({ title: 'Category Updated', message: `${catName} category saved.`, type: 'success' });
+        toast.success(`Category "${catName}" updated.`);
       } else {
         await menuApi.createCategory({
           name: catName.trim(),
@@ -153,12 +160,12 @@ export default function AdminMenuPage() {
           displayOrder: categories.length + 1,
           isActive: catIsActive,
         });
-        setToast({ title: 'Category Created', message: `${catName} category added.`, type: 'success' });
+        toast.success(`Category "${catName}" created.`);
       }
       setIsCategoryModalOpen(false);
       loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to save category.');
+      toast.error(err.message || 'Failed to save category.');
     } finally {
       setSubmitting(false);
     }
@@ -224,32 +231,36 @@ export default function AdminMenuPage() {
 
       if (editingProduct) {
         await menuApi.updateProduct(editingProduct.id, payload);
-        setToast({ title: 'Product Updated', message: `${prodName} details saved.`, type: 'success' });
+        toast.success(`Product "${prodName}" updated successfully.`);
       } else {
         await menuApi.createProduct(payload as any);
-        setToast({ title: 'Product Created', message: `${prodName} added to menu.`, type: 'success' });
+        toast.success(`Product "${prodName}" created and added to menu.`);
       }
       setIsProductModalOpen(false);
       loadData();
     } catch (err: any) {
-      alert(err.message || 'Failed to save product.');
+      toast.error(err.message || 'Failed to save product.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleToggleProductAvailability = async (id: string) => {
-    await menuApi.toggleProductAvailability(id);
-    loadData();
+    try {
+      await menuApi.toggleProductAvailability(id);
+      loadData();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to toggle availability.');
+    }
   };
 
   const handleDuplicateProduct = async (id: string) => {
     try {
       const dup = await menuApi.duplicateProduct(id);
       loadData();
-      setToast({ title: 'Product Duplicated', message: `Created copy "${dup.name}".`, type: 'success' });
-    } catch (err) {
-      alert('Failed to duplicate product.');
+      toast.success(`Created copy "${dup.name}".`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to duplicate product.');
     }
   };
 
@@ -259,15 +270,37 @@ export default function AdminMenuPage() {
       setSubmitting(true);
       if (deleteConfirm.type === 'product') {
         await menuApi.deleteProduct(deleteConfirm.id);
-        setToast({ title: 'Product Deleted', message: `Removed ${deleteConfirm.name}.`, type: 'success' });
-      } else {
+        toast.success(`Removed product "${deleteConfirm.name}".`);
+      } else if (deleteConfirm.type === 'category') {
         await menuApi.deleteCategory(deleteConfirm.id);
-        setToast({ title: 'Category Deleted', message: `Removed ${deleteConfirm.name}.`, type: 'success' });
+        toast.success(`Removed category "${deleteConfirm.name}".`);
+      } else if (deleteConfirm.type === 'variant' && deleteConfirm.prod) {
+        const prod = deleteConfirm.prod;
+        if (prod.variantGroups && prod.variantGroups.length > 0) {
+          const groups = [...prod.variantGroups];
+          groups[0] = {
+            ...groups[0],
+            variants: groups[0].variants.filter((v) => v.id !== deleteConfirm.id),
+          };
+          await menuApi.updateProduct(prod.id, { variantGroups: groups });
+          toast.success(`Deleted variant "${deleteConfirm.name}".`);
+        }
+      } else if (deleteConfirm.type === 'addon' && deleteConfirm.prod) {
+        const prod = deleteConfirm.prod;
+        if (prod.addonGroups && prod.addonGroups.length > 0) {
+          const groups = [...prod.addonGroups];
+          groups[0] = {
+            ...groups[0],
+            addons: groups[0].addons.filter((a) => a.id !== deleteConfirm.id),
+          };
+          await menuApi.updateProduct(prod.id, { addonGroups: groups });
+          toast.success(`Deleted add-on "${deleteConfirm.name}".`);
+        }
       }
       setDeleteConfirm(null);
       loadData();
-    } catch (err) {
-      alert('Failed to delete item.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete item.');
     } finally {
       setSubmitting(false);
     }
@@ -278,41 +311,36 @@ export default function AdminMenuPage() {
     e.preventDefault();
     if (!editingVariant || !varName.trim()) return;
 
-    const prod = editingVariant.product;
-    const groups = prod.variantGroups ? [...prod.variantGroups] : [];
-    let mainGroup = groups[0] ? { ...groups[0] } : { id: 'vg-default', name: 'Portion Size', required: true, variants: [] };
+    try {
+      setSubmitting(true);
+      const prod = editingVariant.product;
+      const groups = prod.variantGroups ? [...prod.variantGroups] : [];
+      let mainGroup = groups[0] ? { ...groups[0] } : { id: 'vg-default', name: 'Portion Size', required: true, variants: [] };
 
-    const newVar: ProductVariant = {
-      id: editingVariant.variant?.id || `var-${Date.now()}`,
-      name: varName.trim(),
-      priceModifier: Number(varPrice),
-      isAvailable: varIsAvailable,
-    };
+      const newVar: ProductVariant = {
+        id: editingVariant.variant?.id || `var-${Date.now()}`,
+        name: varName.trim(),
+        priceModifier: Number(varPrice),
+        isAvailable: varIsAvailable,
+      };
 
-    const existingIdx = mainGroup.variants.findIndex((v) => v.id === newVar.id);
-    if (existingIdx > -1) {
-      mainGroup.variants[existingIdx] = newVar;
-    } else {
-      mainGroup.variants.push(newVar);
+      const existingIdx = mainGroup.variants.findIndex((v) => v.id === newVar.id);
+      if (existingIdx > -1) {
+        mainGroup.variants[existingIdx] = newVar;
+      } else {
+        mainGroup.variants.push(newVar);
+      }
+
+      groups[0] = mainGroup;
+      await menuApi.updateProduct(prod.id, { variantGroups: groups });
+      setIsVariantModalOpen(false);
+      loadData();
+      toast.success(`Saved variant "${varName}".`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save variant.');
+    } finally {
+      setSubmitting(false);
     }
-
-    groups[0] = mainGroup;
-    await menuApi.updateProduct(prod.id, { variantGroups: groups });
-    setIsVariantModalOpen(false);
-    loadData();
-    setToast({ title: 'Variant Saved', message: `Saved variant "${varName}".`, type: 'success' });
-  };
-
-  const handleDeleteVariant = async (prod: MenuItem, variantId: string) => {
-    if (!prod.variantGroups || prod.variantGroups.length === 0) return;
-    const groups = [...prod.variantGroups];
-    groups[0] = {
-      ...groups[0],
-      variants: groups[0].variants.filter((v) => v.id !== variantId),
-    };
-    await menuApi.updateProduct(prod.id, { variantGroups: groups });
-    loadData();
-    setToast({ title: 'Variant Removed', message: 'Variant deleted.', type: 'info' });
   };
 
   // ---------------- ADD-ON ACTIONS ----------------
@@ -320,59 +348,68 @@ export default function AdminMenuPage() {
     e.preventDefault();
     if (!editingAddon || !addonName.trim()) return;
 
-    const prod = editingAddon.product;
-    const groups = prod.addonGroups ? [...prod.addonGroups] : [];
-    let mainGroup = groups[0] ? { ...groups[0] } : { id: 'ag-default', name: 'Custom Extras', required: false, addons: [] };
+    try {
+      setSubmitting(true);
+      const prod = editingAddon.product;
+      const groups = prod.addonGroups ? [...prod.addonGroups] : [];
+      let mainGroup = groups[0] ? { ...groups[0] } : { id: 'ag-default', name: 'Custom Extras', required: false, addons: [] };
 
-    const newAddon: ProductAddon = {
-      id: editingAddon.addon?.id || `add-${Date.now()}`,
-      name: addonName.trim(),
-      price: Number(addonPrice),
-      isAvailable: addonIsAvailable,
-    };
+      const newAddon: ProductAddon = {
+        id: editingAddon.addon?.id || `add-${Date.now()}`,
+        name: addonName.trim(),
+        price: Number(addonPrice),
+        isAvailable: addonIsAvailable,
+      };
 
-    const existingIdx = mainGroup.addons.findIndex((a) => a.id === newAddon.id);
-    if (existingIdx > -1) {
-      mainGroup.addons[existingIdx] = newAddon;
-    } else {
-      mainGroup.addons.push(newAddon);
+      const existingIdx = mainGroup.addons.findIndex((a) => a.id === newAddon.id);
+      if (existingIdx > -1) {
+        mainGroup.addons[existingIdx] = newAddon;
+      } else {
+        mainGroup.addons.push(newAddon);
+      }
+
+      groups[0] = mainGroup;
+      await menuApi.updateProduct(prod.id, { addonGroups: groups });
+      setIsAddonModalOpen(false);
+      loadData();
+      toast.success(`Saved add-on "${addonName}".`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save add-on.');
+    } finally {
+      setSubmitting(false);
     }
-
-    groups[0] = mainGroup;
-    await menuApi.updateProduct(prod.id, { addonGroups: groups });
-    setIsAddonModalOpen(false);
-    loadData();
-    setToast({ title: 'Add-on Saved', message: `Saved add-on "${addonName}".`, type: 'success' });
   };
 
-  const handleDeleteAddon = async (prod: MenuItem, addonId: string) => {
-    if (!prod.addonGroups || prod.addonGroups.length === 0) return;
-    const groups = [...prod.addonGroups];
-    groups[0] = {
-      ...groups[0],
-      addons: groups[0].addons.filter((a) => a.id !== addonId),
-    };
-    await menuApi.updateProduct(prod.id, { addonGroups: groups });
-    loadData();
-    setToast({ title: 'Add-on Removed', message: 'Add-on deleted.', type: 'info' });
-  };
+  if (error) {
+    return (
+      <div className="space-y-6 pb-12">
+        <PageHeader
+          title="Restaurant Menu Management"
+          subtitle="Configure dish catalog, pricing, availability toggles, categories, variants & add-ons."
+        />
+        <ErrorState
+          title="Failed to Load Menu"
+          message={error}
+          onRetry={loadData}
+        />
+      </div>
+    );
+  }
 
-  if (loading) return <LoadingSpinner label="Loading menu items & categories..." />;
-  if (error) return <ErrorState message={error} onRetry={loadData} />;
+  if (loading) {
+    return (
+      <div className="space-y-6 pb-12">
+        <PageHeader
+          title="Restaurant Menu Management"
+          subtitle="Configure dish catalog, pricing, availability toggles, categories, variants & add-ons."
+        />
+        <TableSkeleton rows={8} columns={6} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-12">
-      {toast && (
-        <div className="fixed top-16 left-4 right-4 z-50 max-w-md mx-auto">
-          <Toast
-            type={toast.type}
-            title={toast.title}
-            message={toast.message}
-            onClose={() => setToast(null)}
-          />
-        </div>
-      )}
-
       {/* Page Header */}
       <PageHeader
         title="Restaurant Menu Management"
@@ -434,65 +471,75 @@ export default function AdminMenuPage() {
             </Button>
           </div>
 
-          <div className="divide-y divide-stone-100">
-            {categories.map((cat, idx) => (
-              <div key={cat.id} className="py-4 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-900 font-extrabold text-xs flex items-center justify-center">
-                    #{cat.displayOrder}
+          {categories.length === 0 ? (
+            <EmptyState
+              icon={Layers}
+              title="No categories found."
+              description="Create menu sections to organize your dishes (e.g. Starters, Main Course, Beverages)."
+              actionLabel="Add Category"
+              onAction={openCreateCategoryModal}
+            />
+          ) : (
+            <div className="divide-y divide-stone-100">
+              {categories.map((cat, idx) => (
+                <div key={cat.id} className="py-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-900 font-extrabold text-xs flex items-center justify-center">
+                      #{cat.displayOrder}
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-stone-900 text-sm block">{cat.name}</span>
+                      <span className="text-xs text-stone-500 block max-w-md line-clamp-1">{cat.description}</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="font-extrabold text-stone-900 text-sm block">{cat.name}</span>
-                    <span className="text-xs text-stone-500 block max-w-md line-clamp-1">{cat.description}</span>
+
+                  <div className="flex items-center gap-2">
+                    {/* Reorder Buttons */}
+                    <button
+                      onClick={() => handleReorderCategory(cat.id, 'up')}
+                      disabled={idx === 0}
+                      className="p-1.5 text-stone-400 hover:text-stone-900 disabled:opacity-30 rounded-lg hover:bg-stone-100"
+                      title="Move Up"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleReorderCategory(cat.id, 'down')}
+                      disabled={idx === categories.length - 1}
+                      className="p-1.5 text-stone-400 hover:text-stone-900 disabled:opacity-30 rounded-lg hover:bg-stone-100"
+                      title="Move Down"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
+
+                    {/* Active Toggle */}
+                    <button
+                      onClick={() => handleToggleCategoryActive(cat.id)}
+                      className={`px-3 py-1 rounded-xl text-xs font-bold ${
+                        cat.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-600'
+                      }`}
+                    >
+                      {cat.isActive ? 'Active' : 'Disabled'}
+                    </button>
+
+                    <button
+                      onClick={() => openEditCategoryModal(cat)}
+                      className="p-2 text-stone-500 hover:text-stone-900 rounded-xl hover:bg-stone-100"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+
+                    <button
+                      onClick={() => setDeleteConfirm({ type: 'category', id: cat.id, name: cat.name })}
+                      className="p-2 text-rose-500 hover:text-rose-700 rounded-xl hover:bg-rose-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  {/* Reorder Buttons */}
-                  <button
-                    onClick={() => handleReorderCategory(cat.id, 'up')}
-                    disabled={idx === 0}
-                    className="p-1.5 text-stone-400 hover:text-stone-900 disabled:opacity-30 rounded-lg hover:bg-stone-100"
-                    title="Move Up"
-                  >
-                    <ArrowUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleReorderCategory(cat.id, 'down')}
-                    disabled={idx === categories.length - 1}
-                    className="p-1.5 text-stone-400 hover:text-stone-900 disabled:opacity-30 rounded-lg hover:bg-stone-100"
-                    title="Move Down"
-                  >
-                    <ArrowDown className="w-4 h-4" />
-                  </button>
-
-                  {/* Active Toggle */}
-                  <button
-                    onClick={() => handleToggleCategoryActive(cat.id)}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold ${
-                      cat.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-600'
-                    }`}
-                  >
-                    {cat.isActive ? 'Active' : 'Disabled'}
-                  </button>
-
-                  <button
-                    onClick={() => openEditCategoryModal(cat)}
-                    className="p-2 text-stone-500 hover:text-stone-900 rounded-xl hover:bg-stone-100"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={() => setDeleteConfirm({ type: 'category', id: cat.id, name: cat.name })}
-                    className="p-2 text-rose-500 hover:text-rose-700 rounded-xl hover:bg-rose-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -545,7 +592,24 @@ export default function AdminMenuPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 text-xs">
-                  {products.map((p) => {
+                  {products.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 px-4">
+                        <EmptyState
+                          icon={UtensilsCrossed}
+                          title="No products found."
+                          description={
+                            searchQuery
+                              ? `No dishes match "${searchQuery}".`
+                              : 'No dishes found in this category. Add a delicious new product to your menu.'
+                          }
+                          actionLabel={searchQuery ? 'Clear Search' : 'Add New Dish'}
+                          onAction={searchQuery ? () => setSearchQuery('') : openCreateProductModal}
+                        />
+                      </td>
+                    </tr>
+                  ) : (
+                    products.map((p) => {
                     const catObj = categories.find((c) => c.id === p.categoryId);
 
                     return (
@@ -610,7 +674,7 @@ export default function AdminMenuPage() {
                         </td>
                       </tr>
                     );
-                  })}
+                  }))}
                 </tbody>
               </table>
             </div>
@@ -687,7 +751,7 @@ export default function AdminMenuPage() {
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteVariant(p, v.id)}
+                              onClick={() => setDeleteConfirm({ type: 'variant', id: v.id, name: v.name, prod: p })}
                               className="p-1 text-rose-400 hover:text-rose-700"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -771,7 +835,7 @@ export default function AdminMenuPage() {
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => handleDeleteAddon(p, a.id)}
+                              onClick={() => setDeleteConfirm({ type: 'addon', id: a.id, name: a.name, prod: p })}
                               className="p-1 text-rose-400 hover:text-rose-700"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1075,7 +1139,15 @@ export default function AdminMenuPage() {
         isOpen={Boolean(deleteConfirm)}
         onClose={() => setDeleteConfirm(null)}
         onConfirm={handleConfirmDelete}
-        title={`Delete ${deleteConfirm?.type === 'product' ? 'Dish' : 'Category'}?`}
+        title={`Delete ${
+          deleteConfirm?.type === 'product'
+            ? 'Dish'
+            : deleteConfirm?.type === 'category'
+            ? 'Category'
+            : deleteConfirm?.type === 'variant'
+            ? 'Variant'
+            : 'Add-on'
+        }?`}
         description={`Are you sure you want to delete "${deleteConfirm?.name}"? This action cannot be undone.`}
         confirmText="Yes, Delete"
         variant="danger"

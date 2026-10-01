@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
+import { TableSkeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { useToast } from '../../../components/ui/ToastProvider';
 import { billsApi } from '../../../lib/api/bills';
 import { Bill, BillStatus } from '../../../types/bill';
 import { formatCurrency, formatDateTime } from '../../../lib/utils';
 import { Button } from '../../../components/ui/Button';
-import { Toast } from '../../../components/ui/Toast';
 import { PrintableInvoiceModal } from '../../../components/admin/PrintableInvoiceModal';
 import { BillDetailsModal } from '../../../components/admin/BillDetailsModal';
 import { GenerateBillModal } from '../../../components/admin/GenerateBillModal';
@@ -25,8 +27,10 @@ import {
 } from 'lucide-react';
 
 export default function AdminBillsPage() {
+  const toast = useToast();
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,15 +42,16 @@ export default function AdminBillsPage() {
   const [selectedBillForDetail, setSelectedBillForDetail] = useState<Bill | null>(null);
   const [selectedBillForPrint, setSelectedBillForPrint] = useState<Bill | null>(null);
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<{ title: string; message: string } | null>(null);
 
   const fetchBills = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await billsApi.getBills();
       setBills(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch bills:', err);
+      setError(err?.message || 'Unable to load invoice archives.');
     } finally {
       setLoading(false);
     }
@@ -68,21 +73,15 @@ export default function AdminBillsPage() {
       if (selectedBillForDetail?.id === id) {
         setSelectedBillForDetail(updated);
       }
-      setToastMessage({
-        title: 'Bill Status Updated',
-        message: `${updated.billNumber} set to ${status.toUpperCase()}`,
-      });
-    } catch (err) {
-      console.error(err);
+      toast.success(`Bill ${updated.billNumber} set to ${status.toUpperCase()}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update bill status');
     }
   };
 
   const handleBillGenerated = (newBill: Bill) => {
     setBills((prev) => [newBill, ...prev]);
-    setToastMessage({
-      title: 'Invoice Generated',
-      message: `Generated ${newBill.billNumber} for Table #${newBill.tableNumber}`,
-    });
+    toast.success(`Generated ${newBill.billNumber} for Table #${newBill.tableNumber}`);
   };
 
   // Filter Logic
@@ -132,18 +131,6 @@ export default function AdminBillsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Toast Alert */}
-      {toastMessage && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm">
-          <Toast
-            type="info"
-            title={toastMessage.title}
-            message={toastMessage.message}
-            onClose={() => setToastMessage(null)}
-          />
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-200">
         <div>
@@ -244,14 +231,39 @@ export default function AdminBillsPage() {
       </div>
 
       {/* Bill List Table */}
-      {loading ? (
-        <LoadingSpinner label="Fetching invoice archives..." />
+      {error ? (
+        <ErrorState
+          title="Unable to load bills"
+          message={error}
+          onRetry={fetchBills}
+        />
+      ) : loading ? (
+        <TableSkeleton rows={8} columns={10} />
       ) : filteredBills.length === 0 ? (
-        <div className="bg-white rounded-3xl p-12 text-center text-stone-500 border border-stone-200 shadow-sm">
-          <Receipt className="w-12 h-12 mx-auto mb-3 text-stone-400" />
-          <h3 className="font-bold text-stone-900 text-lg">No Invoices Found</h3>
-          <p className="text-xs text-stone-500">No dining bills matching current search or status filter.</p>
-        </div>
+        <EmptyState
+          icon={Receipt}
+          title="No invoices found."
+          description={
+            searchQuery || statusFilter !== 'all' || tableFilter !== 'all' || dateFilter !== 'all'
+              ? 'No dining bills match your current search or status filter.'
+              : 'No dining bills recorded yet.'
+          }
+          actionLabel={
+            searchQuery || statusFilter !== 'all' || tableFilter !== 'all' || dateFilter !== 'all'
+              ? 'Clear Filters'
+              : 'Generate Table Bill'
+          }
+          onAction={
+            searchQuery || statusFilter !== 'all' || tableFilter !== 'all' || dateFilter !== 'all'
+              ? () => {
+                  setSearchQuery('');
+                  setStatusFilter('all');
+                  setTableFilter('all');
+                  setDateFilter('all');
+                }
+              : () => setIsGenerateModalOpen(true)
+          }
+        />
       ) : (
         <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">

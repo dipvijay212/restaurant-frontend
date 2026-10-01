@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
+import { RequestsListSkeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
 import { requestsApi } from '../../../lib/api/requests';
 import { ServiceRequest } from '../../../types/notification';
 import { RequestCard } from '../../../components/staff/RequestCard';
@@ -12,34 +14,54 @@ import { Bell, CheckCircle2, RefreshCw } from 'lucide-react';
 export default function StaffRequestsPage() {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'accepted' | 'completed'>('all');
-  const [toastMessage, setToastMessage] = useState<{ title: string; message: string } | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ title: string; message: string; type?: 'success' | 'error' | 'info' } | null>(null);
+
+  const fetchRequests = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await requestsApi.getRequests();
+      setRequests(data);
+    } catch (err: any) {
+      setError(err.message || 'Unable to load customer requests.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Subscribe to real-time service requests feed
   useEffect(() => {
     setLoading(true);
-    const unsubscribe = requestsApi.subscribe((updatedReqs) => {
-      setRequests(updatedReqs);
+    setError(null);
+    try {
+      const unsubscribe = requestsApi.subscribe((updatedReqs) => {
+        setRequests(updatedReqs);
+        setLoading(false);
+      });
+      return () => unsubscribe();
+    } catch (err: any) {
+      setError(err.message || 'Unable to connect to live requests feed.');
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }
   }, []);
 
   const handleAccept = async (id: string) => {
     try {
       const updated = await requestsApi.updateRequestStatus(id, 'ACCEPTED', undefined, 'Carlos Waiter');
-      setToastMessage({ title: 'Request Accepted', message: `Attending to Table #${updated.tableNumber}` });
+      setToastMessage({ title: 'Request Accepted', message: `Attending to Table #${updated.tableNumber}`, type: 'success' });
     } catch (err) {
-      console.error(err);
+      setToastMessage({ title: 'Action Failed', message: 'Failed to accept request.', type: 'error' });
     }
   };
 
   const handleComplete = async (id: string) => {
     try {
       const updated = await requestsApi.updateRequestStatus(id, 'COMPLETED');
-      setToastMessage({ title: 'Request Completed', message: `Marked fulfilled for Table #${updated.tableNumber}` });
+      setToastMessage({ title: 'Request Completed', message: `Marked fulfilled for Table #${updated.tableNumber}`, type: 'success' });
     } catch (err) {
-      console.error(err);
+      setToastMessage({ title: 'Action Failed', message: 'Failed to complete request.', type: 'error' });
     }
   };
 
@@ -57,7 +79,7 @@ export default function StaffRequestsPage() {
     <div className="space-y-6 max-w-7xl mx-auto">
       {toastMessage && (
         <div className="fixed top-20 right-4 z-50 max-w-sm">
-          <Toast type="info" title={toastMessage.title} message={toastMessage.message} onClose={() => setToastMessage(null)} />
+          <Toast type={toastMessage.type || 'info'} title={toastMessage.title} message={toastMessage.message} onClose={() => setToastMessage(null)} />
         </div>
       )}
 
@@ -76,6 +98,13 @@ export default function StaffRequestsPage() {
           <span className="px-3 py-1 bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold">
             {requests.filter((r) => r.status.toUpperCase() === 'PENDING').length} Pending Calls
           </span>
+          <button
+            onClick={fetchRequests}
+            className="p-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl transition-colors"
+            title="Refresh Requests"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -117,13 +146,22 @@ export default function StaffRequestsPage() {
 
       {/* Requests Feed */}
       {loading ? (
-        <LoadingSpinner label="Connecting to live requests feed..." />
-      ) : filteredRequests.length === 0 ? (
-        <div className="bg-white rounded-3xl p-12 text-center text-stone-500 border border-stone-200 shadow-sm">
-          <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-600" />
-          <h3 className="font-bold text-stone-900 text-lg">No Active Requests</h3>
-          <p className="text-xs text-stone-500">All customer assistance calls have been fulfilled.</p>
+        <div className="space-y-4">
+          <span className="text-xs font-bold text-stone-400">Connecting to live requests feed...</span>
+          <RequestsListSkeleton count={6} />
         </div>
+      ) : error ? (
+        <ErrorState
+          title="Unable to load customer requests"
+          message={error}
+          onRetry={fetchRequests}
+        />
+      ) : filteredRequests.length === 0 ? (
+        <EmptyState
+          icon={CheckCircle2}
+          title="No Active Requests"
+          description="All customer assistance calls have been fulfilled."
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredRequests.map((req) => (

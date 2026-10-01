@@ -7,6 +7,7 @@ import { CustomerBottomNav } from '../../components/customer/CustomerBottomNav';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { Button } from '../../components/ui/Button';
 import { Toast } from '../../components/ui/Toast';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { feedbackApi } from '../../lib/api/feedback';
 import { CustomerFeedback } from '../../types/feedback';
 import { useAppSelector } from '../../store';
@@ -183,7 +184,23 @@ export default function FeedbackPage() {
         </div>
 
         {loading ? (
-          <LoadingSpinner label="Checking feedback session state..." />
+          <div className="space-y-4">
+            <span className="text-xs font-bold text-stone-400">Checking dining review status...</span>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-white rounded-2xl p-4 border border-stone-100 shadow-sm space-y-3">
+                <Skeleton className="h-5 w-48 rounded" />
+                <div className="flex gap-2">
+                  {Array.from({ length: 5 }).map((_, star) => (
+                    <Skeleton key={star} className="h-8 w-8 rounded-xl" />
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div className="bg-white rounded-2xl p-4 border border-stone-100 shadow-sm space-y-2">
+              <Skeleton className="h-4 w-32 rounded" />
+              <Skeleton className="h-20 w-full rounded-xl" />
+            </div>
+          </div>
         ) : activeReview ? (
           /* SUCCESS OR ALREADY SUBMITTED STATE */
           <div className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm text-center space-y-5 animate-in fade-in">

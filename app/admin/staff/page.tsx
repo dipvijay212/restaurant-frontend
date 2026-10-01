@@ -2,11 +2,14 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
 import { staffApi } from '../../../lib/api/staff';
 import { StaffMember, StaffRole, StaffStatus } from '../../../types/staff';
 import { Button } from '../../../components/ui/Button';
-import { Toast } from '../../../components/ui/Toast';
+import { TableSkeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { useToast } from '../../../components/ui/ToastProvider';
 import { StaffFormModal } from '../../../components/admin/StaffFormModal';
 import { ResetPasswordModal } from '../../../components/admin/ResetPasswordModal';
 import {
@@ -18,7 +21,6 @@ import {
   KeyRound,
   Edit2,
   Power,
-  CheckCircle2,
   Crown,
   ChefHat,
   Receipt,
@@ -29,8 +31,10 @@ import {
 } from 'lucide-react';
 
 export default function AdminStaffPage() {
+  const toast = useToast();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,15 +45,20 @@ export default function AdminStaffPage() {
   const [selectedStaffForEdit, setSelectedStaffForEdit] = useState<StaffMember | null>(null);
   const [selectedStaffForReset, setSelectedStaffForReset] = useState<StaffMember | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<{ title: string; message: string } | null>(null);
+
+  // Confirmation dialog for deactivation
+  const [staffToDeactivate, setStaffToDeactivate] = useState<StaffMember | null>(null);
+  const [isDeactivating, setIsDeactivating] = useState(false);
 
   const fetchStaff = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await staffApi.getStaffMembers();
       setStaff(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch staff list:', err);
+      setError(err?.message || 'Unable to load staff members. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -71,31 +80,52 @@ export default function AdminStaffPage() {
   };
 
   const handleFormSubmit = async (formData: any) => {
-    if (selectedStaffForEdit) {
-      const updated = await staffApi.updateStaffMember(selectedStaffForEdit.id, formData);
-      setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-      setToastMessage({ title: 'Staff Updated', message: `Updated profile for ${updated.name}` });
-    } else {
-      const created = await staffApi.createStaffMember(formData);
-      setStaff((prev) => [created, ...prev]);
-      setToastMessage({ title: 'Staff Created', message: `Added ${created.name} (${created.role}) to staff roster.` });
+    try {
+      if (selectedStaffForEdit) {
+        const updated = await staffApi.updateStaffMember(selectedStaffForEdit.id, formData);
+        setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+        toast.success(`Updated profile for ${updated.name}`);
+      } else {
+        const created = await staffApi.createStaffMember(formData);
+        setStaff((prev) => [created, ...prev]);
+        toast.success(`Added ${created.name} (${created.role}) to staff roster.`);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to save staff member');
     }
   };
 
-  const handleToggleStatus = async (member: StaffMember) => {
-    const nextStatus: StaffStatus = member.status.toUpperCase() === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-    const updated = await staffApi.toggleStaffStatus(member.id, nextStatus);
-    setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-    setToastMessage({
-      title: 'Status Updated',
-      message: `${updated.name} set to ${nextStatus}`,
-    });
+  const executeToggleStatus = async (member: StaffMember, nextStatus: StaffStatus) => {
+    try {
+      setIsDeactivating(true);
+      const updated = await staffApi.toggleStaffStatus(member.id, nextStatus);
+      setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      toast.success(`${updated.name} set to ${nextStatus}`);
+      setStaffToDeactivate(null);
+    } catch (err: any) {
+      toast.error(err?.message || `Failed to update status for ${member.name}`);
+    } finally {
+      setIsDeactivating(false);
+    }
+  };
+
+  const handleToggleStatusClick = (member: StaffMember) => {
+    const isActive = member.status.toUpperCase() === 'ACTIVE';
+    if (isActive) {
+      setStaffToDeactivate(member);
+    } else {
+      executeToggleStatus(member, 'ACTIVE');
+    }
   };
 
   const handleRoleChange = async (member: StaffMember, newRole: StaffRole) => {
-    const updated = await staffApi.updateStaffMember(member.id, { role: newRole });
-    setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
-    setToastMessage({ title: 'Role Updated', message: `${updated.name} role changed to ${newRole.toUpperCase()}` });
+    try {
+      const updated = await staffApi.updateStaffMember(member.id, { role: newRole });
+      setStaff((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      toast.success(`${updated.name} role changed to ${newRole.toUpperCase()}`);
+    } catch (err: any) {
+      toast.error(err?.message || `Failed to update role for ${member.name}`);
+    }
   };
 
   // Role Badge Styling Helper
@@ -159,18 +189,6 @@ export default function AdminStaffPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm">
-          <Toast
-            type="info"
-            title={toastMessage.title}
-            message={toastMessage.message}
-            onClose={() => setToastMessage(null)}
-          />
-        </div>
-      )}
-
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-200">
         <div>
@@ -283,14 +301,34 @@ export default function AdminStaffPage() {
       </div>
 
       {/* Staff List Table View */}
-      {loading ? (
-        <LoadingSpinner label="Loading staff roster..." />
+      {error ? (
+        <ErrorState error={error} onRetry={fetchStaff} />
+      ) : loading ? (
+        <TableSkeleton rows={6} columns={7} />
       ) : filteredStaff.length === 0 ? (
-        <div className="bg-white rounded-3xl p-12 text-center text-stone-500 border border-stone-200 shadow-sm">
-          <Users className="w-12 h-12 mx-auto mb-3 text-stone-400" />
-          <h3 className="font-bold text-stone-900 text-lg">No Staff Members Found</h3>
-          <p className="text-xs text-stone-500">No staff members matching current filter criteria.</p>
-        </div>
+        <EmptyState
+          icon={Users}
+          title="No staff members found."
+          description={
+            searchQuery || roleFilter !== 'all' || statusFilter !== 'all'
+              ? 'Try adjusting your search query or role/status filters.'
+              : 'No staff members registered in the system yet.'
+          }
+          actionLabel={
+            searchQuery || roleFilter !== 'all' || statusFilter !== 'all'
+              ? 'Clear Filters'
+              : 'Add Staff Member'
+          }
+          onAction={
+            searchQuery || roleFilter !== 'all' || statusFilter !== 'all'
+              ? () => {
+                  setSearchQuery('');
+                  setRoleFilter('all');
+                  setStatusFilter('all');
+                }
+              : handleCreateStaff
+          }
+        />
       ) : (
         <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -419,7 +457,7 @@ export default function AdminStaffPage() {
 
                           {/* Deactivate / Activate Status Toggle */}
                           <button
-                            onClick={() => handleToggleStatus(member)}
+                            onClick={() => handleToggleStatusClick(member)}
                             className={`p-1.5 rounded-lg transition-colors ${
                               isActive
                                 ? 'text-stone-400 hover:text-rose-600 hover:bg-rose-50'
@@ -456,7 +494,24 @@ export default function AdminStaffPage() {
         staff={selectedStaffForReset}
         isOpen={!!selectedStaffForReset}
         onClose={() => setSelectedStaffForReset(null)}
-        onSuccess={(msg) => setToastMessage({ title: 'Password Reset', message: msg })}
+        onSuccess={(msg) => toast.success(msg)}
+      />
+
+      {/* Confirm Deactivation Dialog */}
+      <ConfirmDialog
+        isOpen={!!staffToDeactivate}
+        title="Deactivate Staff Account"
+        message={`Are you sure you want to deactivate ${staffToDeactivate?.name}'s account? They will lose access to system login and assigned roles immediately.`}
+        confirmLabel="Deactivate Account"
+        cancelLabel="Keep Active"
+        variant="danger"
+        isLoading={isDeactivating}
+        onCancel={() => setStaffToDeactivate(null)}
+        onConfirm={() => {
+          if (staffToDeactivate) {
+            executeToggleStatus(staffToDeactivate, 'INACTIVE');
+          }
+        }}
       />
     </div>
   );

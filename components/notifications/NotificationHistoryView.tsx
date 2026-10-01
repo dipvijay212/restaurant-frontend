@@ -13,6 +13,9 @@ import {
 import { SystemAlert, NotificationAudience, NotificationCategory } from '../../types/notification';
 import { PageHeader } from '../shared/PageHeader';
 import { Button } from '../ui/Button';
+import { EmptyState } from '../ui/EmptyState';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { useToast } from '../ui/ToastProvider';
 import { mockNotificationEmitter } from '../../lib/socket/mockNotificationEmitter';
 import { 
   Bell, 
@@ -42,6 +45,7 @@ export const NotificationHistoryView: React.FC<NotificationHistoryViewProps> = (
   backHref = '/admin',
 }) => {
   const router = useRouter();
+  const toast = useToast();
   const dispatch = useAppDispatch();
   const notifications = useAppSelector((state) => state.notifications.notifications);
   
@@ -49,6 +53,10 @@ export const NotificationHistoryView: React.FC<NotificationHistoryViewProps> = (
   const [statusFilter, setStatusFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Dialogs
+  const [isClearHistoryConfirmOpen, setIsClearHistoryConfirmOpen] = useState(false);
+  const [isDeleteSelectedConfirmOpen, setIsDeleteSelectedConfirmOpen] = useState(false);
 
   // Filter by audience
   const audienceFiltered = notifications.filter((n) => {
@@ -94,12 +102,23 @@ export const NotificationHistoryView: React.FC<NotificationHistoryViewProps> = (
 
   const handleMarkSelectedRead = () => {
     selectedIds.forEach((id) => dispatch(markNotificationAsRead(id)));
+    toast.success(`Marked ${selectedIds.length} notification(s) as read.`);
     setSelectedIds([]);
   };
 
-  const handleDeleteSelected = () => {
+  const executeDeleteSelected = () => {
+    const count = selectedIds.length;
     selectedIds.forEach((id) => dispatch(removeNotification(id)));
+    toast.success(`Deleted ${count} notification(s).`);
     setSelectedIds([]);
+    setIsDeleteSelectedConfirmOpen(false);
+  };
+
+  const executeClearHistory = () => {
+    dispatch(clearNotifications(audience));
+    toast.success('Notification history cleared.');
+    setSelectedIds([]);
+    setIsClearHistoryConfirmOpen(false);
   };
 
   const getCategoryIcon = (category: NotificationCategory) => {
@@ -171,11 +190,7 @@ export const NotificationHistoryView: React.FC<NotificationHistoryViewProps> = (
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              if (window.confirm('Clear all notifications in history?')) {
-                dispatch(clearNotifications(audience));
-              }
-            }}
+            onClick={() => setIsClearHistoryConfirmOpen(true)}
             className="text-xs font-bold py-2 border-rose-200 text-rose-700 hover:bg-rose-50"
           >
             <Trash2 className="w-4 h-4 mr-1.5" /> Clear History
@@ -243,7 +258,7 @@ export const NotificationHistoryView: React.FC<NotificationHistoryViewProps> = (
                 Mark Selected as Read
               </button>
               <button
-                onClick={handleDeleteSelected}
+                onClick={() => setIsDeleteSelectedConfirmOpen(true)}
                 className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition-colors shadow-sm"
               >
                 Delete Selected
@@ -272,13 +287,25 @@ export const NotificationHistoryView: React.FC<NotificationHistoryViewProps> = (
 
         {/* List Content */}
         {filtered.length === 0 ? (
-          <div className="p-12 text-center text-stone-400 space-y-3">
-            <Bell className="w-10 h-10 mx-auto text-stone-300 stroke-1" />
-            <h3 className="text-sm font-bold text-stone-700">No matching notifications</h3>
-            <p className="text-xs text-stone-500 max-w-sm mx-auto">
-              No notifications were found matching your current search or status filters.
-            </p>
-          </div>
+          <EmptyState
+            icon={Bell}
+            title="No matching notifications"
+            description="No notifications were found matching your current search or status filters."
+            actionLabel={
+              searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'
+                ? 'Clear Filters'
+                : undefined
+            }
+            onAction={
+              searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'
+                ? () => {
+                    setSearchQuery('');
+                    setStatusFilter('all');
+                    setCategoryFilter('all');
+                  }
+                : undefined
+            }
+          />
         ) : (
           <div className="divide-y divide-stone-100">
             {filtered.map((notif) => (
@@ -361,7 +388,10 @@ export const NotificationHistoryView: React.FC<NotificationHistoryViewProps> = (
                     )}
 
                     <button
-                      onClick={() => dispatch(removeNotification(notif.id))}
+                      onClick={() => {
+                        dispatch(removeNotification(notif.id));
+                        toast.success('Notification removed.');
+                      }}
                       className="p-1.5 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-stone-100 transition-colors"
                       title="Delete notification"
                     >
@@ -376,6 +406,30 @@ export const NotificationHistoryView: React.FC<NotificationHistoryViewProps> = (
         )}
 
       </div>
+
+      {/* Confirm Clear History Dialog */}
+      <ConfirmDialog
+        isOpen={isClearHistoryConfirmOpen}
+        title="Clear All Notifications"
+        message="Are you sure you want to permanently clear all notifications in history? This action cannot be undone."
+        confirmLabel="Clear All"
+        cancelLabel="Keep History"
+        variant="danger"
+        onCancel={() => setIsClearHistoryConfirmOpen(false)}
+        onConfirm={executeClearHistory}
+      />
+
+      {/* Confirm Delete Selected Dialog */}
+      <ConfirmDialog
+        isOpen={isDeleteSelectedConfirmOpen}
+        title="Delete Selected Notifications"
+        message={`Are you sure you want to permanently delete the ${selectedIds.length} selected notification(s)?`}
+        confirmLabel="Delete Selected"
+        cancelLabel="Cancel"
+        variant="danger"
+        onCancel={() => setIsDeleteSelectedConfirmOpen(false)}
+        onConfirm={executeDeleteSelected}
+      />
     </div>
   );
 };

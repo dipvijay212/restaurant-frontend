@@ -6,6 +6,7 @@ import { CustomerHeader } from '../../components/customer/CustomerHeader';
 import { CustomerBottomNav } from '../../components/customer/CustomerBottomNav';
 import { Button } from '../../components/ui/Button';
 import { Toast } from '../../components/ui/Toast';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { useAppSelector } from '../../store';
 import { requestsApi } from '../../lib/api/requests';
 import { ServiceRequest, RequestType } from '../../types/notification';
@@ -271,12 +272,18 @@ export default function CustomerRequestsPage() {
         </form>
 
         {/* Real-Time Table Requests Status Tracker */}
-        {tableRequests.length > 0 && (
-          <div className="space-y-3 pt-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-stone-400">
-              Your Table Assistance Requests ({tableRequests.length})
-            </h2>
+        <div className="space-y-3 pt-2">
+          <h2 className="text-xs font-bold uppercase tracking-wider text-stone-400">
+            Your Table Assistance Requests ({tableRequests.length})
+          </h2>
 
+          {tableRequests.length === 0 ? (
+            <EmptyState
+              icon={BellRing}
+              title="No requests yet."
+              description="Select any service above if you need water, cutlery, napkins, or waiter assistance at Table #{tableNumber}."
+            />
+          ) : (
             <div className="space-y-3">
               {tableRequests.map((req) => {
                 const info = getStatusDisplay(req);
@@ -313,8 +320,8 @@ export default function CustomerRequestsPage() {
                 );
               })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </main>
 
       <CustomerBottomNav />

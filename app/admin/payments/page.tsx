@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
+import { TableSkeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { useToast } from '../../../components/ui/ToastProvider';
 import { paymentsApi } from '../../../lib/api/payments';
 import { PaymentTransaction, PaymentStatus, PaymentMethod } from '../../../types/payment';
 import { formatCurrency, formatDateTime } from '../../../lib/utils';
 import { Button } from '../../../components/ui/Button';
-import { Toast } from '../../../components/ui/Toast';
 import { PaymentDetailModal } from '../../../components/admin/PaymentDetailModal';
 import { cashfreeAdapter } from '../../../lib/payment/cashfreeAdapter';
 import {
@@ -25,8 +27,10 @@ import {
 } from 'lucide-react';
 
 export default function AdminPaymentsPage() {
+  const toast = useToast();
   const [payments, setPayments] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,15 +40,16 @@ export default function AdminPaymentsPage() {
 
   // Modals
   const [selectedPaymentForDetail, setSelectedPaymentForDetail] = useState<PaymentTransaction | null>(null);
-  const [toastMessage, setToastMessage] = useState<{ title: string; message: string } | null>(null);
 
   const fetchPayments = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await paymentsApi.getPayments();
       setPayments(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch payments:', err);
+      setError(err?.message || 'Unable to load payment audit records.');
     } finally {
       setLoading(false);
     }
@@ -58,12 +63,9 @@ export default function AdminPaymentsPage() {
     try {
       const updated = await paymentsApi.updatePaymentStatus(id, newStatus);
       setPayments((prev) => prev.map((p) => (p.id === id ? updated : p)));
-      setToastMessage({
-        title: 'Status Updated',
-        message: `Transaction ${updated.transactionRef || updated.id} set to ${newStatus}`,
-      });
-    } catch (err) {
-      console.error(err);
+      toast.success(`Transaction ${updated.transactionRef || updated.id} set to ${newStatus}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update transaction status');
     }
   };
 
@@ -71,12 +73,9 @@ export default function AdminPaymentsPage() {
     try {
       const updated = await paymentsApi.refundPayment(id, undefined, reason);
       setPayments((prev) => prev.map((p) => (p.id === id ? updated : p)));
-      setToastMessage({
-        title: 'Payment Refunded',
-        message: `Refund processed for ${updated.transactionRef || updated.id}`,
-      });
-    } catch (err) {
-      console.error(err);
+      toast.success(`Refund processed for ${updated.transactionRef || updated.id}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Payment refund failed');
     }
   };
 
@@ -167,18 +166,6 @@ export default function AdminPaymentsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Toast Alert */}
-      {toastMessage && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm">
-          <Toast
-            type="info"
-            title={toastMessage.title}
-            message={toastMessage.message}
-            onClose={() => setToastMessage(null)}
-          />
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-200">
         <div>
@@ -316,14 +303,39 @@ export default function AdminPaymentsPage() {
       </div>
 
       {/* Transaction List Table */}
-      {loading ? (
-        <LoadingSpinner label="Loading transaction audit logs..." />
+      {error ? (
+        <ErrorState
+          title="Unable to load payments"
+          message={error}
+          onRetry={fetchPayments}
+        />
+      ) : loading ? (
+        <TableSkeleton rows={8} columns={8} />
       ) : filteredPayments.length === 0 ? (
-        <div className="bg-white rounded-3xl p-12 text-center text-stone-500 border border-stone-200 shadow-sm">
-          <CreditCard className="w-12 h-12 mx-auto mb-3 text-stone-400" />
-          <h3 className="font-bold text-stone-900 text-lg">No Transactions Found</h3>
-          <p className="text-xs text-stone-500">No payment records match the selected filters.</p>
-        </div>
+        <EmptyState
+          icon={CreditCard}
+          title="No transactions found."
+          description={
+            searchQuery || statusFilter !== 'all' || methodFilter !== 'all' || dateFilter !== 'all'
+              ? 'No payment records match the selected filters.'
+              : 'Payment transactions will be logged here as guests settle bills.'
+          }
+          actionLabel={
+            searchQuery || statusFilter !== 'all' || methodFilter !== 'all' || dateFilter !== 'all'
+              ? 'Clear Filters'
+              : undefined
+          }
+          onAction={
+            searchQuery || statusFilter !== 'all' || methodFilter !== 'all' || dateFilter !== 'all'
+              ? () => {
+                  setSearchQuery('');
+                  setStatusFilter('all');
+                  setMethodFilter('all');
+                  setDateFilter('all');
+                }
+              : undefined
+          }
+        />
       ) : (
         <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">

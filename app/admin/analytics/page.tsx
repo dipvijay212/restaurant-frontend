@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
 import { analyticsApi } from '../../../lib/api/analytics';
 import { AnalyticsSummary } from '../../../types/analytics';
 import { formatCurrency } from '../../../lib/utils';
+import { StatGridSkeleton, Skeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
 import {
   DollarSign,
   TrendingUp,
@@ -21,29 +22,66 @@ import {
   Award,
   Layers,
   ArrowUpRight,
+  RefreshCw,
 } from 'lucide-react';
 
 export default function AdminAnalyticsPage() {
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadAnalytics() {
-      try {
-        setLoading(true);
-        const data = await analyticsApi.getAnalyticsSummary();
-        setAnalytics(data);
-      } catch (err) {
-        console.error('Failed to load analytics:', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadAnalytics = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await analyticsApi.getAnalyticsSummary();
+      setAnalytics(data);
+    } catch (err: any) {
+      console.error('Failed to load analytics:', err);
+      setError(err?.message || 'Unable to load restaurant analytics. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    loadAnalytics();
   }, []);
 
-  if (loading || !analytics) {
-    return <LoadingSpinner label="Compiling restaurant analytics data..." />;
+  useEffect(() => {
+    loadAnalytics();
+  }, [loadAnalytics]);
+
+  if (loading) {
+    return (
+      <div className="space-y-8 max-w-7xl mx-auto">
+        <PageHeader
+          title="Restaurant Analytics & Performance"
+          subtitle="Actual sales, operational efficiency, menu engineering, and table turnover metrics."
+        />
+        <StatGridSkeleton count={6} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-72 w-full rounded-2xl" />
+          <Skeleton className="h-72 w-full rounded-2xl" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Skeleton className="h-60 w-full rounded-2xl" />
+          <Skeleton className="h-60 w-full rounded-2xl" />
+          <Skeleton className="h-60 w-full rounded-2xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !analytics) {
+    return (
+      <div className="space-y-8 max-w-7xl mx-auto">
+        <PageHeader
+          title="Restaurant Analytics & Performance"
+          subtitle="Actual sales, operational efficiency, menu engineering, and table turnover metrics."
+        />
+        <ErrorState
+          error={error || 'Unable to load analytics data.'}
+          onRetry={loadAnalytics}
+        />
+      </div>
+    );
   }
 
   // Max values for chart scaling
@@ -54,10 +92,19 @@ export default function AdminAnalyticsPage() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Header */}
-      <PageHeader
-        title="Restaurant Analytics & Performance"
-        subtitle="Actual sales, operational efficiency, menu engineering, and table turnover metrics."
-      />
+      <div className="flex items-center justify-between gap-4">
+        <PageHeader
+          title="Restaurant Analytics & Performance"
+          subtitle="Actual sales, operational efficiency, menu engineering, and table turnover metrics."
+        />
+        <button
+          onClick={loadAnalytics}
+          className="p-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl transition-colors self-start md:self-center"
+          title="Refresh Analytics"
+        >
+          <RefreshCw className="w-4 h-4" />
+        </button>
+      </div>
 
       {/* SECTION 1: OVERVIEW */}
       <section className="space-y-4">

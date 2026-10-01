@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
 import { ErrorState } from '../../../components/shared/ErrorState';
 import { Modal } from '../../../components/ui/Modal';
-import { Toast } from '../../../components/ui/Toast';
+import { TableSkeleton } from '../../../components/ui/Skeleton';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { useToast } from '../../../components/ui/ToastProvider';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { Button } from '../../../components/ui/Button';
 import { ordersApi } from '../../../lib/api/orders';
@@ -29,11 +31,13 @@ import {
   Calendar,
   Layers,
   ArrowRight,
+  RefreshCw,
 } from 'lucide-react';
 
 const DELAY_THRESHOLD_MINUTES = 15;
 
 export default function AdminOrdersPage() {
+  const toast = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +52,16 @@ export default function AdminOrdersPage() {
   // Detail Modal State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [toast, setToast] = useState<{ title: string; message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+
+  // Destructive Action Confirmation State
+  const [actionToConfirm, setActionToConfirm] = useState<{
+    orderId: string;
+    orderNumber: string;
+    nextStatus: OrderStatus;
+    actionLabel: string;
+  } | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   const fetchOrdersAndTables = async () => {
     try {
@@ -139,9 +151,18 @@ export default function AdminOrdersPage() {
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, nextStatus: OrderStatus, actionLabel: string) => {
+  const handleInitiateStatusUpdate = (orderId: string, orderNumber: string, nextStatus: OrderStatus, actionLabel: string) => {
+    if (nextStatus === 'REJECTED' || nextStatus === 'CANCELLED') {
+      setActionToConfirm({ orderId, orderNumber, nextStatus, actionLabel });
+      setIsConfirmOpen(true);
+      return;
+    }
+    executeStatusUpdate(orderId, nextStatus, actionLabel);
+  };
+
+  const executeStatusUpdate = async (orderId: string, nextStatus: OrderStatus, actionLabel: string) => {
     try {
-      setUpdatingStatus(true);
+      setUpdatingOrderId(orderId);
       const updated = await ordersApi.updateOrderStatus(orderId, nextStatus, `Staff action: ${actionLabel}`);
       fetchOrdersAndTables();
 
@@ -149,15 +170,13 @@ export default function AdminOrdersPage() {
         setSelectedOrder(updated);
       }
 
-      setToast({
-        title: 'Status Updated',
-        message: `Order ${updated.orderNumber} is now ${nextStatus.toUpperCase()}.`,
-        type: 'success',
-      });
+      toast.success(`Order ${updated.orderNumber} is now ${nextStatus.toUpperCase()}.`);
     } catch (err: any) {
-      alert('Failed to update order status');
+      toast.error(err?.message || 'Failed to update order status');
     } finally {
-      setUpdatingStatus(false);
+      setUpdatingOrderId(null);
+      setIsConfirmOpen(false);
+      setActionToConfirm(null);
     }
   };
 
@@ -166,8 +185,33 @@ export default function AdminOrdersPage() {
     setIsDetailModalOpen(true);
   };
 
-  if (loading) return <LoadingSpinner label="Loading order management stream..." />;
-  if (error) return <ErrorState message={error} onRetry={fetchOrdersAndTables} />;
+  if (error) {
+    return (
+      <div className="space-y-6 pb-12">
+        <PageHeader
+          title="Order Management Console"
+          subtitle="Live dining order queue, status transitions, table filters, and delayed order alerts."
+        />
+        <ErrorState
+          title="Failed to Load Orders"
+          message={error}
+          onRetry={fetchOrdersAndTables}
+        />
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6 pb-12">
+        <PageHeader
+          title="Order Management Console"
+          subtitle="Live dining order queue, status transitions, table filters, and delayed order alerts."
+        />
+        <TableSkeleton rows={8} columns={7} />
+      </div>
+    );
+  }
 
   const statusTabsList = [
     { key: 'ALL', label: 'All Orders' },
@@ -183,17 +227,6 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="space-y-6 pb-12">
-      {toast && (
-        <div className="fixed top-16 left-4 right-4 z-50 max-w-md mx-auto">
-          <Toast
-            type={toast.type}
-            title={toast.title}
-            message={toast.message}
-            onClose={() => setToast(null)}
-          />
-        </div>
-      )}
-
       {/* Page Header */}
       <PageHeader
         title="Order Management Console"
@@ -295,8 +328,27 @@ export default function AdminOrdersPage() {
             <tbody className="divide-y divide-stone-100 text-xs">
               {filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-stone-400 font-medium">
-                    No orders match your filter criteria.
+                  <td colSpan={7} className="py-12 px-4">
+                    <EmptyState
+                      icon={ShoppingBag}
+                      title={orders.length === 0 ? "No orders yet." : "No orders match your filter"}
+                      description={
+                        orders.length === 0
+                          ? "Incoming customer orders placed from table QR codes will appear here automatically."
+                          : "Try resetting your search query or switching the status filter tab."
+                      }
+                      actionLabel={orders.length > 0 ? "Reset Filters" : undefined}
+                      onAction={
+                        orders.length > 0
+                          ? () => {
+                              setStatusTab('ALL');
+                              setSearchQuery('');
+                              setSelectedTableFilter('all');
+                              setSelectedDateFilter('all');
+                            }
+                          : undefined
+                      }
+                    />
                   </td>
                 </tr>
               ) : (
@@ -351,10 +403,10 @@ export default function AdminOrdersPage() {
                             return (
                               <Button
                                 key={act.status}
-                                onClick={() => handleUpdateStatus(ord.id, act.status as OrderStatus, act.label)}
+                                onClick={() => handleInitiateStatusUpdate(ord.id, ord.orderNumber, act.status as OrderStatus, act.label)}
                                 variant={act.variant as any}
                                 size="sm"
-                                isLoading={updatingStatus}
+                                isLoading={updatingOrderId === ord.id}
                                 className="text-[11px] py-1 px-2.5 font-extrabold rounded-xl"
                               >
                                 <Icon className="w-3 h-3 mr-1" /> {act.label}
@@ -498,9 +550,9 @@ export default function AdminOrdersPage() {
                   return (
                     <Button
                       key={act.status}
-                      onClick={() => handleUpdateStatus(selectedOrder.id, act.status as OrderStatus, act.label)}
+                      onClick={() => handleInitiateStatusUpdate(selectedOrder.id, selectedOrder.orderNumber, act.status as OrderStatus, act.label)}
                       variant={act.variant as any}
-                      isLoading={updatingStatus}
+                      isLoading={updatingOrderId === selectedOrder.id}
                       className="flex-1 py-3 font-extrabold text-xs rounded-2xl shadow-sm"
                     >
                       <Icon className="w-4 h-4 mr-1.5" /> {act.label}
@@ -512,6 +564,29 @@ export default function AdminOrdersPage() {
           </div>
         )}
       </Modal>
+
+      {/* Confirmation Dialog: Order Cancellation / Rejection */}
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        onClose={() => {
+          setIsConfirmOpen(false);
+          setActionToConfirm(null);
+        }}
+        onConfirm={() => {
+          if (actionToConfirm) {
+            executeStatusUpdate(
+              actionToConfirm.orderId,
+              actionToConfirm.nextStatus,
+              actionToConfirm.actionLabel
+            );
+          }
+        }}
+        title={`${actionToConfirm?.actionLabel} ${actionToConfirm?.orderNumber}?`}
+        description={`Are you sure you want to mark order ${actionToConfirm?.orderNumber} as ${actionToConfirm?.nextStatus}? This is a destructive action and cannot be undone.`}
+        confirmText={actionToConfirm?.actionLabel || 'Confirm'}
+        variant="danger"
+        isLoading={Boolean(updatingOrderId)}
+      />
     </div>
   );
 }

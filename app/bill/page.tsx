@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { CustomerHeader } from '../../components/customer/CustomerHeader';
 import { CustomerBottomNav } from '../../components/customer/CustomerBottomNav';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
+import { ErrorState } from '../../components/shared/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Button } from '../../components/ui/Button';
 import { Toast } from '../../components/ui/Toast';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { billsApi } from '../../lib/api/bills';
 import { ordersApi } from '../../lib/api/orders';
 import { requestsApi } from '../../lib/api/requests';
@@ -42,6 +44,7 @@ export default function BillPage() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [sessionOrders, setSessionOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Payment UI state machine
   const [selectedMethod, setSelectedMethod] = useState<'counter' | 'online'>('online');
@@ -52,29 +55,31 @@ export default function BillPage() {
   const [toast, setToast] = useState<{ title: string; message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const [requestingBill, setRequestingBill] = useState(false);
 
-  useEffect(() => {
-    async function loadBillAndOrders() {
-      try {
-        setLoading(true);
-        const [b, orders] = await Promise.all([
-          billsApi.getSessionBill(tableId, tableNumber, customerName),
-          ordersApi.getOrders(),
-        ]);
-        setBill(b);
+  const loadBillAndOrders = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [b, orders] = await Promise.all([
+        billsApi.getSessionBill(tableId, tableNumber, customerName),
+        ordersApi.getOrders(),
+      ]);
+      setBill(b);
 
-        if (b.status === 'paid') {
-          setPaymentState('successful');
-          setPaymentTxnRef('CF-TXN-84920194');
-        }
-
-        const myOrders = orders.filter((o: Order) => o.tableNumber === tableNumber);
-        setSessionOrders(myOrders);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+      if (b.status === 'paid') {
+        setPaymentState('successful');
+        setPaymentTxnRef('CF-TXN-84920194');
       }
+
+      const myOrders = orders.filter((o: Order) => o.tableNumber === tableNumber);
+      setSessionOrders(myOrders);
+    } catch (err: any) {
+      setError(err.message || 'Unable to load bill.');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadBillAndOrders();
   }, [tableId, tableNumber, customerName]);
 
@@ -140,13 +145,28 @@ export default function BillPage() {
       } else if (resp.status === 'cancelled') {
         setPaymentState('cancelled');
         setErrorMessage(resp.errorMessage || 'Payment transaction was cancelled.');
+        setToast({
+          title: 'Payment Cancelled',
+          message: 'Transaction cancelled by user.',
+          type: 'info',
+        });
       } else {
         setPaymentState('failed');
         setErrorMessage(resp.errorMessage || 'Payment transaction failed.');
+        setToast({
+          title: 'Payment failed.',
+          message: resp.errorMessage || 'Unable to process transaction. Your account has not been charged.',
+          type: 'error',
+        });
       }
     } catch (err: any) {
       setPaymentState('failed');
       setErrorMessage(err.message || 'Payment service error occurred.');
+      setToast({
+        title: 'Payment failed.',
+        message: err.message || 'Payment service error occurred.',
+        type: 'error',
+      });
     }
   };
 
@@ -184,7 +204,37 @@ export default function BillPage() {
         </div>
 
         {loading ? (
-          <LoadingSpinner label="Calculating dining session bill..." />
+          <div className="space-y-4">
+            <span className="text-xs font-bold text-stone-400">Calculating dining session bill...</span>
+            <div className="bg-white rounded-3xl p-6 border border-stone-100 shadow-sm space-y-4">
+              <div className="flex justify-between items-center pb-4 border-b border-stone-100">
+                <Skeleton className="h-5 w-28 rounded" />
+                <Skeleton className="h-6 w-20 rounded-full" />
+              </div>
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full rounded" />
+                <Skeleton className="h-4 w-5/6 rounded" />
+                <Skeleton className="h-4 w-4/6 rounded" />
+              </div>
+              <div className="pt-4 border-t border-stone-100 space-y-2">
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-20 rounded" />
+                  <Skeleton className="h-4 w-16 rounded" />
+                </div>
+                <div className="flex justify-between">
+                  <Skeleton className="h-6 w-24 rounded" />
+                  <Skeleton className="h-6 w-24 rounded" />
+                </div>
+              </div>
+            </div>
+            <Skeleton className="h-12 w-full rounded-2xl" />
+          </div>
+        ) : error ? (
+          <ErrorState
+            title="Unable to load bill"
+            message={error}
+            onRetry={loadBillAndOrders}
+          />
         ) : !bill ? (
           <EmptyState
             icon={Receipt}

@@ -20,9 +20,12 @@ import { RestaurantConfig } from '../../types/restaurant';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { addToCart } from '../../store/slices/cartSlice';
 import { UtensilsCrossed } from 'lucide-react';
+import { ProductGridSkeleton } from '../../components/ui/Skeleton';
+import { useToast } from '../../components/ui/ToastProvider';
 
 export default function MenuPage() {
   const dispatch = useAppDispatch();
+  const { toast } = useToast();
   const cartItems = useAppSelector((state) => state.cart.items);
 
   const [restaurant, setRestaurant] = useState<RestaurantConfig | null>(null);
@@ -48,7 +51,7 @@ export default function MenuPage() {
       setCategories(cats);
       setAllProducts(prods);
     } catch (err: any) {
-      setError(err.message || 'Failed to load menu items.');
+      setError(err.message || 'Unable to load menu items.');
     } finally {
       setLoading(false);
     }
@@ -92,6 +95,7 @@ export default function MenuPage() {
       setSelectedProductForSheet(product);
     } else {
       dispatch(addToCart({ menuItem: product, quantity: 1 }));
+      toast.success('Added to Order', `${product.name} added to your cart.`);
     }
   };
 
@@ -124,9 +128,14 @@ export default function MenuPage() {
 
         {/* Content Area */}
         {loading ? (
-          <LoadingSpinner label="Loading artisanal menu items..." />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-stone-400">Loading dishes...</span>
+            </div>
+            <ProductGridSkeleton count={6} />
+          </div>
         ) : error ? (
-          <ErrorState message={error} onRetry={loadMenuData} />
+          <ErrorState title="Unable to load menu items" message={error} onRetry={loadMenuData} />
         ) : (
           <>
             {/* Popular & Chef Specials Row (Only shown when not searching) */}
@@ -142,7 +151,7 @@ export default function MenuPage() {
             {filteredProducts.length === 0 ? (
               <EmptyState
                 icon={UtensilsCrossed}
-                title="No dishes found"
+                title="No products found."
                 description="Try searching for another dish or clear your active filters."
                 actionLabel="Reset Search & Filters"
                 onAction={() => {

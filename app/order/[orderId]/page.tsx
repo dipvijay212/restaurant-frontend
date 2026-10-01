@@ -11,6 +11,7 @@ import { ErrorState } from '../../../components/shared/ErrorState';
 import { Button } from '../../../components/ui/Button';
 import { Toast } from '../../../components/ui/Toast';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { StatusBadge } from '../../../components/ui/StatusBadge';
 import { ordersApi } from '../../../lib/api/orders';
 import { orderSocketService } from '../../../lib/api/socketMock';
@@ -125,15 +126,74 @@ export default function OrderDetailsPage() {
         title: 'Order Cancelled',
         message: `Order ${order.orderNumber} has been cancelled.`,
       });
-    } catch (err) {
-      alert('Failed to cancel order.');
+    } catch (err: any) {
+      setToastMessage({
+        title: 'Cancellation Failed',
+        message: err.message || 'Failed to cancel order. Please ask waitstaff for assistance.',
+      });
     } finally {
       setCancelling(false);
     }
   };
 
-  if (loading) return <LoadingSpinner label="Connecting to order status feed..." />;
-  if (error || !order) return <ErrorState message={error || 'Order not found'} onRetry={() => router.push('/orders')} />;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-stone-50 pb-24 md:pb-8 flex flex-col">
+        <CustomerHeader />
+        <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-4 w-24 rounded" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+          </div>
+          <div className="bg-white rounded-2xl p-5 border border-stone-100 shadow-sm space-y-3">
+            <div className="flex justify-between items-start">
+              <div className="space-y-1">
+                <Skeleton className="h-7 w-28 rounded" />
+                <Skeleton className="h-3 w-20 rounded" />
+              </div>
+              <Skeleton className="h-6 w-20 rounded-xl" />
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl p-5 border border-stone-100 shadow-sm space-y-4">
+            <Skeleton className="h-4 w-32 rounded" />
+            <div className="flex justify-between items-center px-4">
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-1 flex-1 mx-2 rounded" />
+              <Skeleton className="h-10 w-10 rounded-full" />
+              <Skeleton className="h-1 flex-1 mx-2 rounded" />
+              <Skeleton className="h-10 w-10 rounded-full" />
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl p-5 border border-stone-100 shadow-sm space-y-3">
+            <Skeleton className="h-4 w-28 rounded" />
+            <Skeleton className="h-12 w-full rounded-xl" />
+            <Skeleton className="h-12 w-full rounded-xl" />
+            <div className="pt-3 border-t border-stone-100 flex justify-between">
+              <Skeleton className="h-4 w-16 rounded" />
+              <Skeleton className="h-5 w-20 rounded" />
+            </div>
+          </div>
+        </main>
+        <CustomerBottomNav />
+      </div>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <div className="min-h-screen bg-stone-50 pb-24 md:pb-8 flex flex-col">
+        <CustomerHeader />
+        <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4">
+          <ErrorState
+            title="Unable to load order"
+            message={error || 'We could not find the requested dining order.'}
+            onRetry={loadOrder}
+          />
+        </main>
+        <CustomerBottomNav />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-stone-50 pb-24 md:pb-8 flex flex-col">

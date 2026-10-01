@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
+import { OrderListSkeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
 import { ordersApi } from '../../../lib/api/orders';
 import { orderSocketService } from '../../../lib/api/socketMock';
 import { Order, OrderStatus } from '../../../types/order';
@@ -17,16 +19,18 @@ export default function StaffOrdersPage() {
   const dispatch = useAppDispatch();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filterTab, setFilterTab] = useState<'ready' | 'all'>('ready');
   const [toastMessage, setToastMessage] = useState<{ title: string; message: string } | null>(null);
 
   const fetchOrders = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await ordersApi.getOrders();
       setOrders(data);
-    } catch (err) {
-      console.error('Failed to fetch orders:', err);
+    } catch (err: any) {
+      setError(err.message || 'Unable to load orders pass.');
     } finally {
       setLoading(false);
     }
@@ -73,7 +77,7 @@ export default function StaffOrdersPage() {
 
       setToastMessage({ title: 'Order Served!', message: `${updated.orderNumber} delivered to Table #${updated.tableNumber}` });
     } catch (err) {
-      console.error(err);
+      setToastMessage({ title: 'Update Failed', message: 'Failed to update order status.' });
     }
   };
 
@@ -112,7 +116,7 @@ export default function StaffOrdersPage() {
 
         <button
           onClick={fetchOrders}
-          className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-1.5 self-start sm:self-auto"
+          className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-1.5 self-start sm:self-auto transition-colors"
         >
           <RefreshCw className="w-4 h-4" /> Refresh Pass
         </button>
@@ -140,13 +144,22 @@ export default function StaffOrdersPage() {
 
       {/* Orders List */}
       {loading ? (
-        <LoadingSpinner label="Checking kitchen food pass..." />
-      ) : filteredOrders.length === 0 ? (
-        <div className="bg-white rounded-3xl p-12 text-center text-stone-500 border border-stone-200 shadow-sm">
-          <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-600" />
-          <h3 className="font-bold text-stone-900 text-lg">No Orders Awaiting Delivery</h3>
-          <p className="text-xs text-stone-500">All prepared kitchen dishes have been served.</p>
+        <div className="space-y-4">
+          <span className="text-xs font-bold text-stone-400">Checking kitchen food pass...</span>
+          <OrderListSkeleton count={4} />
         </div>
+      ) : error ? (
+        <ErrorState
+          title="Unable to load orders pass"
+          message={error}
+          onRetry={fetchOrders}
+        />
+      ) : filteredOrders.length === 0 ? (
+        <EmptyState
+          icon={CheckCircle2}
+          title="No Orders Awaiting Delivery"
+          description="All prepared kitchen dishes have been served to table guests."
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredOrders.map((ord) => (

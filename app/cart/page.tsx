@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CustomerHeader } from '../../components/customer/CustomerHeader';
 import { CustomerBottomNav } from '../../components/customer/CustomerBottomNav';
@@ -8,6 +8,8 @@ import { CartItem } from '../../components/customer/CartItem';
 import { BillSummary } from '../../components/customer/BillSummary';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { Button } from '../../components/ui/Button';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { useToast } from '../../components/ui/ToastProvider';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { updateQuantity, removeFromCart, setSpecialNotes, clearCart } from '../../store/slices/cartSlice';
 import { ShoppingBag, ArrowRight } from 'lucide-react';
@@ -16,8 +18,11 @@ import { initialRestaurantData } from '../../mock/restaurant';
 export default function CartPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const { toast } = useToast();
   const cart = useAppSelector((state) => state.cart);
   const session = useAppSelector((state) => state.customerSession);
+
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
 
   const subtotal = cart.items.reduce((acc, item) => acc + item.itemTotal, 0);
   const taxAmount = subtotal * (initialRestaurantData.taxRate / 100);
@@ -25,6 +30,17 @@ export default function CartPage() {
   const totalAmount = subtotal + taxAmount + serviceCharge;
 
   const tableNumber = session.table?.tableNumber || cart.tableNumber;
+
+  const handleConfirmClear = () => {
+    dispatch(clearCart());
+    setIsClearModalOpen(false);
+    toast.info('Cart Cleared', 'All items have been removed from your cart.');
+  };
+
+  const handleRemoveItem = (id: string, name: string) => {
+    dispatch(removeFromCart(id));
+    toast.info('Item Removed', `Removed ${name} from your order.`);
+  };
 
   return (
     <div className="min-h-screen bg-stone-50 pb-24 md:pb-8 flex flex-col">
@@ -58,7 +74,7 @@ export default function CartPage() {
                   key={item.id}
                   item={item}
                   onUpdateQuantity={(id, q) => dispatch(updateQuantity({ id, quantity: q }))}
-                  onRemove={(id) => dispatch(removeFromCart(id))}
+                  onRemove={(id) => handleRemoveItem(id, item.productName)}
                 />
               ))}
             </div>
@@ -87,7 +103,11 @@ export default function CartPage() {
 
             {/* Action Buttons */}
             <div className="flex items-center gap-3 pt-2">
-              <Button variant="outline" onClick={() => dispatch(clearCart())} className="flex-1 rounded-xl">
+              <Button
+                variant="outline"
+                onClick={() => setIsClearModalOpen(true)}
+                className="flex-1 rounded-xl text-rose-600 border-rose-200 hover:bg-rose-50"
+              >
                 Clear Cart
               </Button>
               <Button
@@ -101,6 +121,17 @@ export default function CartPage() {
           </div>
         )}
       </main>
+
+      {/* Clear Cart Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isClearModalOpen}
+        onClose={() => setIsClearModalOpen(false)}
+        onConfirm={handleConfirmClear}
+        title="Clear Cart?"
+        description="Are you sure you want to remove all items from your order cart? This action cannot be undone."
+        confirmText="Yes, Clear Cart"
+        variant="danger"
+      />
 
       <CustomerBottomNav />
     </div>

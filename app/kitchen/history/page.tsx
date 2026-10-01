@@ -4,28 +4,35 @@ import React, { useEffect, useState } from 'react';
 import { ordersApi } from '../../../lib/api/orders';
 import { Order } from '../../../types/order';
 import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { Skeleton } from '../../../components/ui/Skeleton';
 import { formatCurrency, formatDateTime } from '../../../lib/utils';
 import { KitchenHeader } from '../../../components/kitchen/KitchenHeader';
-import { Search, CheckCircle2, History, Utensils, ArrowLeft } from 'lucide-react';
+import { Search, CheckCircle2, History, Utensils, ArrowLeft, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 
 export default function KitchenHistoryPage() {
   const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    async function loadHistory() {
-      try {
-        setLoading(true);
-        const data = await ordersApi.getOrders();
-        setCompletedOrders(data.filter((o) => ['served', 'completed'].includes(o.status)));
-      } catch (err) {
-        console.error('Failed to load kitchen history:', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadHistory = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await ordersApi.getOrders();
+      setCompletedOrders(data.filter((o) => ['served', 'completed'].includes(o.status)));
+    } catch (err: any) {
+      console.error('Failed to load kitchen history:', err);
+      setError(err?.message || 'Unable to load kitchen order history.');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadHistory();
   }, []);
 
@@ -79,14 +86,42 @@ export default function KitchenHistoryPage() {
           />
         </div>
 
-        {loading ? (
-          <LoadingSpinner label="Loading ticket archive..." />
-        ) : filtered.length === 0 ? (
-          <div className="bg-stone-900 rounded-3xl p-12 text-center text-stone-400 border border-stone-800">
-            <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-stone-600" />
-            <h3 className="font-bold text-white text-lg">No Fulfilled Tickets Found</h3>
-            <p className="text-xs">No served orders matching filter.</p>
+        {error ? (
+          <ErrorState
+            title="Failed to Load History"
+            message={error}
+            onRetry={loadHistory}
+          />
+        ) : loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-stone-900 rounded-2xl p-5 border border-stone-800 space-y-4">
+                <div className="flex justify-between items-start pb-3 border-b border-stone-800">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-6 w-24 bg-stone-800" />
+                    <Skeleton className="h-3 w-36 bg-stone-800" />
+                  </div>
+                  <Skeleton className="h-6 w-16 rounded-lg bg-stone-800" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full bg-stone-800" />
+                  <Skeleton className="h-4 w-3/4 bg-stone-800" />
+                </div>
+                <div className="pt-3 border-t border-stone-800 flex justify-between">
+                  <Skeleton className="h-3 w-24 bg-stone-800" />
+                  <Skeleton className="h-4 w-16 bg-stone-800" />
+                </div>
+              </div>
+            ))}
           </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={CheckCircle2}
+            title={searchQuery ? "No Matching Orders Found" : "No Fulfilled Tickets Found"}
+            description={searchQuery ? "Try searching for a different order number or table." : "No served orders recorded yet for this shift."}
+            actionLabel={searchQuery ? "Clear Search" : undefined}
+            onAction={searchQuery ? () => setSearchQuery('') : undefined}
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map((ord) => (

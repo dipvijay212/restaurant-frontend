@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { PaymentTransaction, PaymentStatus } from '../../types/payment';
 import { Button } from '../ui/Button';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { formatCurrency, formatDateTime } from '../../lib/utils';
 import { CreditCard, X, ShieldCheck, AlertCircle, RefreshCw, RotateCcw, CheckCircle2, Copy } from 'lucide-react';
 
@@ -26,6 +27,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
   const [status, setStatus] = useState<PaymentStatus>(payment.status);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isRefunding, setIsRefunding] = useState(false);
+  const [isConfirmRefundOpen, setIsConfirmRefundOpen] = useState(false);
   const [refundReason, setRefundReason] = useState('');
   const [showRefundInput, setShowRefundInput] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -211,8 +213,7 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleProcessRefund}
-                  isLoading={isRefunding}
+                  onClick={() => setIsConfirmRefundOpen(true)}
                   className="py-1.5 px-4 text-xs font-black rounded-xl bg-purple-600 hover:bg-purple-500 text-white"
                 >
                   Confirm Issue Refund
@@ -249,6 +250,21 @@ export const PaymentDetailModal: React.FC<PaymentDetailModalProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Confirmation Dialog: Issue Refund */}
+      <ConfirmDialog
+        isOpen={isConfirmRefundOpen}
+        onClose={() => setIsConfirmRefundOpen(false)}
+        onConfirm={async () => {
+          await handleProcessRefund();
+          setIsConfirmRefundOpen(false);
+        }}
+        title={`Issue Refund of ${formatCurrency(payment.amount)}?`}
+        description={`Are you sure you want to refund ${formatCurrency(payment.amount)} for transaction ${payment.transactionRef || payment.id}? This will reverse the charge on Cashfree gateway.`}
+        confirmText="Issue Refund"
+        variant="danger"
+        isLoading={isRefunding}
+      />
     </div>
   );
 };

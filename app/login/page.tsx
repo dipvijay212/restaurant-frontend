@@ -7,7 +7,7 @@ import { setAuthenticatedUser, AuthRole } from '../../store/slices/authSlice';
 import { authApi, MOCK_STAFF_ACCOUNTS } from '../../lib/api/auth';
 import { getDefaultRouteForRole } from '../../lib/auth/roleGuards';
 import { Button } from '../../components/ui/Button';
-import { Toast } from '../../components/ui/Toast';
+import { useToast } from '../../components/ui/ToastProvider';
 import {
   Lock,
   Mail,
@@ -25,6 +25,7 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
+  const toast = useToast();
   const dispatch = useAppDispatch();
   const currentUser = useAppSelector((state) => state.auth.user);
 
@@ -32,7 +33,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ title: string; message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Form submit handler
   const handleLogin = async (e: React.FormEvent) => {
@@ -60,11 +60,7 @@ export default function LoginPage() {
       // Save to Redux store & localStorage session
       dispatch(setAuthenticatedUser(authenticatedStaff));
 
-      setToast({
-        title: 'Authentication Successful',
-        message: `Welcome back, ${authenticatedStaff.name} (${authenticatedStaff.role})!`,
-        type: 'success',
-      });
+      toast.success(`Welcome back, ${authenticatedStaff.name} (${authenticatedStaff.role})!`);
 
       // Redirect to role portal
       const targetRoute = getDefaultRouteForRole(authenticatedStaff.role);
@@ -92,11 +88,7 @@ export default function LoginPage() {
       const authenticatedStaff = await authApi.login(acc.email, acc.password);
       dispatch(setAuthenticatedUser(authenticatedStaff));
 
-      setToast({
-        title: `Logged in as ${role}`,
-        message: `Signed in as ${authenticatedStaff.name}. Navigating...`,
-        type: 'success',
-      });
+      toast.success(`Signed in as ${authenticatedStaff.name} (${role}).`);
 
       const targetRoute = getDefaultRouteForRole(role);
       setTimeout(() => {
@@ -119,17 +111,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-stone-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      {toast && (
-        <div className="fixed top-4 left-4 right-4 z-50 max-w-md mx-auto">
-          <Toast
-            type={toast.type}
-            title={toast.title}
-            message={toast.message}
-            onClose={() => setToast(null)}
-          />
-        </div>
-      )}
-
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center space-y-2">
         <div className="w-14 h-14 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-black text-2xl shadow-lg mx-auto mb-2">
           D

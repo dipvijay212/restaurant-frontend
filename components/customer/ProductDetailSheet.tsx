@@ -8,6 +8,7 @@ import { VariantSelector } from './VariantSelector';
 import { AddonSelector } from './AddonSelector';
 import { Button } from '../ui/Button';
 import { formatCurrency } from '../../lib/utils';
+import { useToast } from '../ui/ToastProvider';
 import { useAppDispatch } from '../../store';
 import { addToCartCustomized, CartVariantInfo, CartAddonInfo } from '../../store/slices/cartSlice';
 import { MessageSquare, Clock, Sparkles } from 'lucide-react';
@@ -24,6 +25,7 @@ export const ProductDetailSheet: React.FC<ProductDetailSheetProps> = ({
   product,
 }) => {
   const dispatch = useAppDispatch();
+  const { toast } = useToast();
 
   const [quantity, setQuantity] = useState(1);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
@@ -103,6 +105,7 @@ export const ProductDetailSheet: React.FC<ProductDetailSheetProps> = ({
       })
     );
 
+    toast.success('Added to Order', `${quantity}x ${product.name} customized and added.`);
     onClose();
   };
 

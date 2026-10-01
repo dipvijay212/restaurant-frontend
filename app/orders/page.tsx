@@ -1,37 +1,43 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { CustomerHeader } from '../../components/customer/CustomerHeader';
 import { CustomerBottomNav } from '../../components/customer/CustomerBottomNav';
-import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
+import { OrderListSkeleton } from '../../components/ui/Skeleton';
+import { ErrorState } from '../../components/shared/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { ordersApi } from '../../lib/api/orders';
 import { Order } from '../../types/order';
-import { Clock, ChevronRight, ShoppingBag } from 'lucide-react';
+import { Clock, ChevronRight, ShoppingBag, RefreshCw } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '../../lib/utils';
 import { useAppSelector } from '../../store';
 
 export default function CustomerOrdersPage() {
+  const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const storeOrders = useAppSelector((state) => state.orders.orders);
 
-  useEffect(() => {
-    async function loadOrders() {
-      try {
-        setLoading(true);
-        const data = await ordersApi.getOrders();
-        setOrders(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+  const loadOrders = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await ordersApi.getOrders();
+      setOrders(data);
+    } catch (err: any) {
+      setError(err.message || 'Unable to load your orders.');
+    } finally {
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
     loadOrders();
-  }, [storeOrders]);
+  }, [loadOrders, storeOrders]);
 
   const activeOrders = orders.filter((o) =>
     ['pending', 'accepted', 'preparing', 'ready'].includes(o.status)
@@ -45,15 +51,35 @@ export default function CustomerOrdersPage() {
       <CustomerHeader />
 
       <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 space-y-6">
-        <h1 className="text-xl font-bold text-stone-900">Your Orders</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-stone-900">Your Orders</h1>
+          <button
+            onClick={loadOrders}
+            className="p-2 text-stone-500 hover:text-stone-900 rounded-xl hover:bg-stone-100 transition-colors text-xs font-bold flex items-center gap-1"
+            title="Refresh Orders"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        </div>
 
         {loading ? (
-          <LoadingSpinner label="Fetching your order history..." />
+          <div className="space-y-4">
+            <span className="text-xs font-bold text-stone-400">Loading your orders...</span>
+            <OrderListSkeleton count={3} />
+          </div>
+        ) : error ? (
+          <ErrorState
+            title="Unable to load orders"
+            message={error}
+            onRetry={loadOrders}
+          />
         ) : orders.length === 0 ? (
           <EmptyState
             icon={ShoppingBag}
-            title="No orders placed yet"
-            description="Browse our menu and place your first order."
+            title="No orders yet."
+            description="Explore our menu and place your first delicious dining order."
+            actionLabel="Browse Menu"
+            onAction={() => router.push('/menu')}
           />
         ) : (
           <>

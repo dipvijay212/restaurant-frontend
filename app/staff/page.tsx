@@ -16,6 +16,9 @@ import { RequestCard } from '../../components/staff/RequestCard';
 import { StaffOrderCard } from '../../components/staff/StaffOrderCard';
 import { TableCard } from '../../components/staff/TableCard';
 import { formatCurrency } from '../../lib/utils';
+import { ErrorState } from '../../components/shared/ErrorState';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { RequestsListSkeleton, TableGridSkeleton, OrderListSkeleton, Skeleton } from '../../components/ui/Skeleton';
 import { Button } from '../../components/ui/Button';
 import { Toast } from '../../components/ui/Toast';
 import { useAppDispatch } from '../../store';
@@ -43,6 +46,7 @@ export default function StaffDashboardPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'requests' | 'ready_orders' | 'tables' | 'bills'>('requests');
   const [toastMessage, setToastMessage] = useState<{ title: string; message: string } | null>(null);
@@ -51,6 +55,7 @@ export default function StaffDashboardPage() {
   const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const [reqData, ordData, tblData, billData] = await Promise.all([
         requestsApi.getRequests(),
         ordersApi.getOrders(),
@@ -61,8 +66,8 @@ export default function StaffDashboardPage() {
       setOrders(ordData);
       setTables(tblData);
       setBills(billData);
-    } catch (err) {
-      console.error('Failed to load waitstaff portal data:', err);
+    } catch (err: any) {
+      setError(err.message || 'Unable to load waitstaff portal data.');
     } finally {
       setLoading(false);
     }
@@ -344,17 +349,29 @@ export default function StaffDashboardPage() {
           </Link>
         </div>
 
+        {/* Error State Banner */}
+        {error && (
+          <ErrorState
+            title="Unable to load staff portal"
+            message={error}
+            onRetry={loadDashboardData}
+          />
+        )}
+
         {/* Tab 1: Service Requests */}
-        {activeTab === 'requests' && (
+        {activeTab === 'requests' && !error && (
           <div>
             {loading ? (
-              <LoadingSpinner label="Loading customer requests..." />
-            ) : requests.filter((r) => r.status !== 'COMPLETED' && r.status !== 'fulfilled').length === 0 ? (
-              <div className="py-12 text-center text-stone-500 bg-stone-50 rounded-2xl border border-stone-200">
-                <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-emerald-600" />
-                <h3 className="font-bold text-stone-900 text-base">All Service Calls Attended</h3>
-                <p className="text-xs text-stone-500">No pending guest requests on the floor.</p>
+              <div className="space-y-4">
+                <span className="text-xs font-bold text-stone-400">Loading customer requests...</span>
+                <RequestsListSkeleton count={4} />
               </div>
+            ) : requests.filter((r) => r.status !== 'COMPLETED' && r.status !== 'fulfilled').length === 0 ? (
+              <EmptyState
+                icon={CheckCircle2}
+                title="All service calls attended"
+                description="No pending guest requests on the floor."
+              />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {requests
@@ -373,16 +390,19 @@ export default function StaffDashboardPage() {
         )}
 
         {/* Tab 2: Ready Orders Pass */}
-        {activeTab === 'ready_orders' && (
+        {activeTab === 'ready_orders' && !error && (
           <div>
             {loading ? (
-              <LoadingSpinner label="Checking kitchen ready pass..." />
-            ) : readyOrders.length === 0 ? (
-              <div className="py-12 text-center text-stone-500 bg-stone-50 rounded-2xl border border-stone-200">
-                <Utensils className="w-10 h-10 mx-auto mb-2 text-stone-400" />
-                <h3 className="font-bold text-stone-900 text-base">No Dishes Awaiting Delivery</h3>
-                <p className="text-xs text-stone-500">Kitchen is preparing active orders.</p>
+              <div className="space-y-4">
+                <span className="text-xs font-bold text-stone-400">Checking kitchen ready pass...</span>
+                <OrderListSkeleton count={3} />
               </div>
+            ) : readyOrders.length === 0 ? (
+              <EmptyState
+                icon={Utensils}
+                title="No dishes awaiting delivery"
+                description="Kitchen is preparing active orders. Ready orders will appear here immediately."
+              />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {readyOrders.map((ord) => (
@@ -398,10 +418,19 @@ export default function StaffDashboardPage() {
         )}
 
         {/* Tab 3: Tables Floor Map */}
-        {activeTab === 'tables' && (
+        {activeTab === 'tables' && !error && (
           <div>
             {loading ? (
-              <LoadingSpinner label="Loading floor tables..." />
+              <div className="space-y-4">
+                <span className="text-xs font-bold text-stone-400">Loading floor tables...</span>
+                <TableGridSkeleton count={8} />
+              </div>
+            ) : tables.length === 0 ? (
+              <EmptyState
+                icon={Grid}
+                title="No tables found."
+                description="No floor tables configured yet."
+              />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {tables.map((tbl) => (
@@ -417,10 +446,30 @@ export default function StaffDashboardPage() {
         )}
 
         {/* Tab 4: Bills & Settlement */}
-        {activeTab === 'bills' && (
+        {activeTab === 'bills' && !error && (
           <div>
             {loading ? (
-              <LoadingSpinner label="Loading table bills..." />
+              <div className="space-y-3">
+                <span className="text-xs font-bold text-stone-400">Loading table bills...</span>
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl p-5 border border-stone-200 shadow-sm space-y-3">
+                    <div className="flex justify-between items-center">
+                      <Skeleton className="h-5 w-24 rounded" />
+                      <Skeleton className="h-5 w-20 rounded" />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <Skeleton className="h-4 w-32 rounded" />
+                      <Skeleton className="h-8 w-28 rounded-xl" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : bills.length === 0 ? (
+              <EmptyState
+                icon={Receipt}
+                title="No bills found."
+                description="All active table dining tabs have been settled."
+              />
             ) : (
               <div className="space-y-3">
                 {bills.map((b) => (

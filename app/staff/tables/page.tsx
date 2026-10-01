@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
+import { TableGridSkeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
 import { tablesApi } from '../../../lib/api/tables';
 import { Table, TableStatus } from '../../../types/table';
 import { TableCard } from '../../../components/staff/TableCard';
@@ -12,6 +14,7 @@ import { Grid, Filter, RefreshCw } from 'lucide-react';
 export default function StaffTablesPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [areaFilter, setAreaFilter] = useState<string>('all');
   const [toastMessage, setToastMessage] = useState<{ title: string; message: string } | null>(null);
@@ -19,10 +22,11 @@ export default function StaffTablesPage() {
   const fetchTables = async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await tablesApi.getTables();
       setTables(data);
-    } catch (err) {
-      console.error('Failed to fetch floor tables:', err);
+    } catch (err: any) {
+      setError(err.message || 'Unable to load tables.');
     } finally {
       setLoading(false);
     }
@@ -38,7 +42,7 @@ export default function StaffTablesPage() {
       setTables((prev) => prev.map((t) => (t.id === id ? updated : t)));
       setToastMessage({ title: 'Table Updated', message: `Table #${updated.tableNumber} status set to ${status}` });
     } catch (err) {
-      console.error(err);
+      setToastMessage({ title: 'Update Failed', message: 'Failed to update table status.' });
     }
   };
 
@@ -69,7 +73,7 @@ export default function StaffTablesPage() {
 
         <button
           onClick={fetchTables}
-          className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-1.5 self-start sm:self-auto"
+          className="px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-xl text-xs font-bold flex items-center gap-1.5 self-start sm:self-auto transition-colors"
         >
           <RefreshCw className="w-4 h-4" /> Refresh Map
         </button>
@@ -114,7 +118,27 @@ export default function StaffTablesPage() {
 
       {/* Tables Grid */}
       {loading ? (
-        <LoadingSpinner label="Loading floor seating map..." />
+        <div className="space-y-4">
+          <span className="text-xs font-bold text-stone-400">Loading floor seating map...</span>
+          <TableGridSkeleton count={8} />
+        </div>
+      ) : error ? (
+        <ErrorState
+          title="Unable to load tables."
+          message={error}
+          onRetry={fetchTables}
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          icon={Grid}
+          title="No tables found."
+          description="No tables match your selected floor area and status filters."
+          actionLabel="Reset Filters"
+          onAction={() => {
+            setStatusFilter('all');
+            setAreaFilter('all');
+          }}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filtered.map((t) => (

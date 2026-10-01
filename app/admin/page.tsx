@@ -33,13 +33,19 @@ import {
 } from 'lucide-react';
 import { formatCurrency, formatDateTime } from '../../lib/utils';
 
+import { StatGridSkeleton, TableSkeleton, Skeleton } from '../../components/ui/Skeleton';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { useToast } from '../../components/ui/ToastProvider';
+
 export default function AdminDashboardPage() {
+  const toast = useToast();
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fulfillingId, setFulfillingId] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -68,13 +74,76 @@ export default function AdminDashboardPage() {
   }, []);
 
   const handleFulfillRequest = async (id: string) => {
-    await requestsApi.updateRequestStatus(id, 'COMPLETED');
-    const updated = await requestsApi.getRequests();
-    setRequests(updated);
+    try {
+      setFulfillingId(id);
+      await requestsApi.updateRequestStatus(id, 'COMPLETED');
+      const updated = await requestsApi.getRequests();
+      setRequests(updated);
+      toast.success('Service request marked as fulfilled.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to fulfill request.');
+    } finally {
+      setFulfillingId(null);
+    }
   };
 
-  if (loading) return <LoadingSpinner label="Loading operations dashboard shell..." />;
-  if (error || !analytics) return <ErrorState message={error || 'Dashboard unavailable'} onRetry={loadData} />;
+  if (error || (!loading && !analytics)) {
+    return (
+      <div className="space-y-6 pb-12">
+        <PageHeader
+          title="Admin Operations Dashboard"
+          subtitle="Real-time single restaurant command center, live order queue & dining floor metrics."
+        />
+        <ErrorState
+          title="Unable to load dashboard"
+          message={error || 'Failed to load operations metrics.'}
+          onRetry={loadData}
+        />
+      </div>
+    );
+  }
+
+  if (loading || !analytics) {
+    return (
+      <div className="space-y-6 pb-12">
+        <PageHeader
+          title="Admin Operations Dashboard"
+          subtitle="Real-time single restaurant command center, live order queue & dining floor metrics."
+        />
+        <StatGridSkeleton count={6} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white rounded-3xl p-6 border border-stone-200/80 shadow-sm space-y-4">
+              <Skeleton className="h-6 w-36" />
+              <TableSkeleton rows={5} columns={6} />
+            </div>
+            <div className="bg-white rounded-3xl p-6 border border-stone-200/80 shadow-sm space-y-4">
+              <Skeleton className="h-6 w-44" />
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-24 rounded-2xl" />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl p-6 border border-stone-200/80 shadow-sm space-y-4">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-20 rounded-2xl" />
+            </div>
+            <div className="bg-white rounded-3xl p-6 border border-stone-200/80 shadow-sm space-y-4">
+              <Skeleton className="h-6 w-44" />
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 rounded-xl" />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Filter metrics
   const activeTablesList = tables.filter((t) => t.status === 'occupied');
@@ -170,34 +239,42 @@ export default function AdminDashboardPage() {
               </Link>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-stone-200 text-stone-400 text-[11px] uppercase tracking-wider font-extrabold">
-                    <th className="pb-3 px-2">Order #</th>
-                    <th className="pb-3 px-2">Table</th>
-                    <th className="pb-3 px-2">Customer</th>
-                    <th className="pb-3 px-2">Total</th>
-                    <th className="pb-3 px-2">Status</th>
-                    <th className="pb-3 px-2">Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100 text-xs">
-                  {recentOrders.slice(0, 5).map((ord) => (
-                    <tr key={ord.id} className="hover:bg-stone-50 transition-colors">
-                      <td className="py-3.5 px-2 font-black text-stone-900">{ord.orderNumber}</td>
-                      <td className="py-3.5 px-2 font-semibold text-stone-700">Table #{ord.tableNumber}</td>
-                      <td className="py-3.5 px-2 text-stone-600 font-medium">{ord.customerName}</td>
-                      <td className="py-3.5 px-2 font-bold text-stone-900">{formatCurrency(ord.totalAmount)}</td>
-                      <td className="py-3.5 px-2">
-                        <StatusBadge status={ord.status} size="sm" />
-                      </td>
-                      <td className="py-3.5 px-2 text-stone-400 text-[11px]">{formatDateTime(ord.createdAt)}</td>
+            {recentOrders.length === 0 ? (
+              <EmptyState
+                icon={ShoppingBag}
+                title="No orders yet."
+                description="Live incoming customer orders will appear here automatically."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-stone-200 text-stone-400 text-[11px] uppercase tracking-wider font-extrabold">
+                      <th className="pb-3 px-2">Order #</th>
+                      <th className="pb-3 px-2">Table</th>
+                      <th className="pb-3 px-2">Customer</th>
+                      <th className="pb-3 px-2">Total</th>
+                      <th className="pb-3 px-2">Status</th>
+                      <th className="pb-3 px-2">Time</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100 text-xs">
+                    {recentOrders.slice(0, 5).map((ord) => (
+                      <tr key={ord.id} className="hover:bg-stone-50 transition-colors">
+                        <td className="py-3.5 px-2 font-black text-stone-900">{ord.orderNumber}</td>
+                        <td className="py-3.5 px-2 font-semibold text-stone-700">Table #{ord.tableNumber}</td>
+                        <td className="py-3.5 px-2 text-stone-600 font-medium">{ord.customerName}</td>
+                        <td className="py-3.5 px-2 font-bold text-stone-900">{formatCurrency(ord.totalAmount)}</td>
+                        <td className="py-3.5 px-2">
+                          <StatusBadge status={ord.status} size="sm" />
+                        </td>
+                        <td className="py-3.5 px-2 text-stone-400 text-[11px]">{formatDateTime(ord.createdAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* SECTION 2: ACTIVE TABLES */}
@@ -215,46 +292,54 @@ export default function AdminDashboardPage() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {tables.slice(0, 6).map((tbl) => {
-                const isOccupied = tbl.status === 'occupied';
+            {tables.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="No tables found."
+                description="Configure dining tables in the Floor Map settings."
+              />
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {tables.slice(0, 6).map((tbl) => {
+                  const isOccupied = tbl.status === 'occupied';
 
-                return (
-                  <div
-                    key={tbl.id}
-                    className={`p-4 rounded-2xl border text-xs space-y-2 transition-all ${
-                      isOccupied
-                        ? 'bg-amber-50/60 border-amber-300'
-                        : 'bg-stone-50 border-stone-200 opacity-75'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-extrabold text-stone-900 text-sm">Table #{tbl.tableNumber}</span>
-                      <span
-                        className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
-                          isOccupied ? 'bg-amber-200 text-amber-900' : 'bg-stone-200 text-stone-700'
-                        }`}
-                      >
-                        {tbl.status}
-                      </span>
-                    </div>
-
-                    {isOccupied ? (
-                      <div>
-                        <span className="text-[11px] text-amber-900 font-bold block truncate">
-                          {tbl.currentCustomerName || 'Guest'}
-                        </span>
-                        <span className="text-[10px] text-stone-500 block">
-                          {tbl.capacity} Seats • {tbl.currentOrderTotal ? formatCurrency(tbl.currentOrderTotal) : 'Active'}
+                  return (
+                    <div
+                      key={tbl.id}
+                      className={`p-4 rounded-2xl border text-xs space-y-2 transition-all ${
+                        isOccupied
+                          ? 'bg-amber-50/60 border-amber-300'
+                          : 'bg-stone-50 border-stone-200 opacity-75'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="font-extrabold text-stone-900 text-sm">Table #{tbl.tableNumber}</span>
+                        <span
+                          className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                            isOccupied ? 'bg-amber-200 text-amber-900' : 'bg-stone-200 text-stone-700'
+                          }`}
+                        >
+                          {tbl.status}
                         </span>
                       </div>
-                    ) : (
-                      <span className="text-[11px] text-stone-400 block">{tbl.capacity} Seats • Clean</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+
+                      {isOccupied ? (
+                        <div>
+                          <span className="text-[11px] text-amber-900 font-bold block truncate">
+                            {tbl.currentCustomerName || 'Guest'}
+                          </span>
+                          <span className="text-[10px] text-stone-500 block">
+                            {tbl.capacity} Seats • {tbl.currentOrderTotal ? formatCurrency(tbl.currentOrderTotal) : 'Active'}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-stone-400 block">{tbl.capacity} Seats • Clean</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -294,6 +379,7 @@ export default function AdminDashboardPage() {
                     </div>
                     <Button
                       onClick={() => handleFulfillRequest(req.id)}
+                      isLoading={fulfillingId === req.id}
                       variant="success"
                       size="sm"
                       className="text-[11px] px-2.5 py-1 font-bold rounded-xl flex-shrink-0"

@@ -3,11 +3,13 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
 import { ErrorState } from '../../../components/shared/ErrorState';
 import { Button } from '../../../components/ui/Button';
 import { Modal } from '../../../components/ui/Modal';
-import { Toast } from '../../../components/ui/Toast';
+import { TableGridSkeleton, Skeleton } from '../../../components/ui/Skeleton';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { useToast } from '../../../components/ui/ToastProvider';
 import { tablesApi } from '../../../lib/api/tables';
 import { ordersApi } from '../../../lib/api/orders';
 import { requestsApi } from '../../../lib/api/requests';
@@ -38,6 +40,7 @@ import {
 import { formatCurrency, formatDateTime } from '../../../lib/utils';
 
 export default function AdminTablesPage() {
+  const toast = useToast();
   const [tables, setTables] = useState<Table[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +52,15 @@ export default function AdminTablesPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+
+  // Confirmation States
+  const [tableToToggle, setTableToToggle] = useState<Table | null>(null);
+  const [isToggleConfirmOpen, setIsToggleConfirmOpen] = useState(false);
+  const [toggleLoading, setToggleLoading] = useState(false);
+
+  const [tableToRegenerate, setTableToRegenerate] = useState<Table | null>(null);
+  const [isRegenerateConfirmOpen, setIsRegenerateConfirmOpen] = useState(false);
+  const [regenerateLoading, setRegenerateLoading] = useState(false);
 
   // Selected Table Context
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
@@ -65,8 +77,6 @@ export default function AdminTablesPage() {
   const [detailsRequests, setDetailsRequests] = useState<ServiceRequest[]>([]);
   const [detailsBill, setDetailsBill] = useState<Bill | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
-
-  const [toast, setToast] = useState<{ title: string; message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   const fetchTables = async () => {
     try {
@@ -106,13 +116,9 @@ export default function AdminTablesPage() {
 
       setIsCreateModalOpen(false);
       fetchTables();
-      setToast({
-        title: 'Table Created',
-        message: `Table #${tableNumberInput} added to ${areaInput}.`,
-        type: 'success',
-      });
+      toast.success(`Table #${tableNumberInput} added to ${areaInput}.`);
     } catch (err: any) {
-      alert(err.message || 'Failed to create table');
+      toast.error(err.message || 'Failed to create table');
     } finally {
       setSubmitting(false);
     }
@@ -143,48 +149,62 @@ export default function AdminTablesPage() {
 
       setIsEditModalOpen(false);
       fetchTables();
-      setToast({
-        title: 'Table Updated',
-        message: `Table #${tableNumberInput} configuration updated.`,
-        type: 'success',
-      });
+      toast.success(`Table #${tableNumberInput} configuration updated.`);
     } catch (err: any) {
-      alert(err.message || 'Failed to update table');
+      toast.error(err.message || 'Failed to update table');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Action: Toggle Deactivate/Activate Table
-  const handleToggleDeactivate = async (t: Table) => {
+  // Action: Confirm Toggle Deactivate/Activate Table
+  const requestToggleDeactivate = (t: Table) => {
+    setTableToToggle(t);
+    setIsToggleConfirmOpen(true);
+  };
+
+  const handleConfirmToggle = async () => {
+    if (!tableToToggle) return;
     try {
-      const updated = await tablesApi.toggleTableActiveStatus(t.id);
+      setToggleLoading(true);
+      const updated = await tablesApi.toggleTableActiveStatus(tableToToggle.id);
       fetchTables();
-      setToast({
-        title: updated.isActive ? 'Table Activated' : 'Table Deactivated',
-        message: `Table #${t.tableNumber} is now ${updated.isActive ? 'Active' : 'Inactive'}.`,
-        type: updated.isActive ? 'success' : 'info',
-      });
-    } catch (err) {
-      alert('Failed to update table status');
+      if (updated.isActive) {
+        toast.success(`Table #${tableToToggle.tableNumber} is now Active.`);
+      } else {
+        toast.info(`Table #${tableToToggle.tableNumber} has been Deactivated.`);
+      }
+      setIsToggleConfirmOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update table status');
+    } finally {
+      setToggleLoading(false);
+      setTableToToggle(null);
     }
   };
 
-  // Action: Regenerate QR Token
-  const handleRegenerateQR = async (t: Table) => {
+  // Action: Confirm Regenerate QR Token
+  const requestRegenerateQR = (t: Table) => {
+    setTableToRegenerate(t);
+    setIsRegenerateConfirmOpen(true);
+  };
+
+  const handleConfirmRegenerateQR = async () => {
+    if (!tableToRegenerate) return;
     try {
-      const updated = await tablesApi.regenerateQR(t.id);
-      if (selectedTable?.id === t.id) {
+      setRegenerateLoading(true);
+      const updated = await tablesApi.regenerateQR(tableToRegenerate.id);
+      if (selectedTable?.id === tableToRegenerate.id) {
         setSelectedTable(updated);
       }
       fetchTables();
-      setToast({
-        title: 'QR Code Regenerated',
-        message: `New QR token generated for Table #${t.tableNumber}.`,
-        type: 'success',
-      });
-    } catch (err) {
-      alert('Failed to regenerate QR code');
+      toast.success(`New QR token generated for Table #${tableToRegenerate.tableNumber}.`);
+      setIsRegenerateConfirmOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to regenerate QR code');
+    } finally {
+      setRegenerateLoading(false);
+      setTableToRegenerate(null);
     }
   };
 
@@ -239,22 +259,38 @@ export default function AdminTablesPage() {
     }
   };
 
-  if (loading) return <LoadingSpinner label="Loading floorplan tables..." />;
-  if (error) return <ErrorState message={error} onRetry={fetchTables} />;
+  if (error) {
+    return (
+      <div className="space-y-6 pb-12">
+        <PageHeader
+          title="Table Management & Floorplan"
+          subtitle="Manage dining areas, table sessions, and QR code posters"
+        />
+        <ErrorState
+          title="Unable to load tables."
+          message={error}
+          onRetry={fetchTables}
+        />
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6 pb-12">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold text-stone-900">Table Management & Floorplan</h1>
+            <p className="text-xs text-stone-500">Manage dining areas, table sessions, and QR code posters</p>
+          </div>
+        </div>
+        <TableGridSkeleton count={8} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-12">
-      {toast && (
-        <div className="fixed top-16 left-4 right-4 z-50 max-w-md mx-auto">
-          <Toast
-            type={toast.type}
-            title={toast.title}
-            message={toast.message}
-            onClose={() => setToast(null)}
-          />
-        </div>
-      )}
-
       {/* Page Header with Create Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -314,113 +350,143 @@ export default function AdminTablesPage() {
       </div>
 
       {/* ---------------- TABLE GRID ---------------- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {filteredTables.map((t) => {
-          const badge = getStatusBadge(t.status);
-          const isOccupied = ['OCCUPIED', 'WAITING_FOR_SERVICE', 'BILL_REQUESTED', 'occupied'].includes(t.status);
+      {filteredTables.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No tables found."
+          description={
+            activeAreaFilter !== 'All' || activeStatusFilter !== 'All'
+              ? 'No dining tables match your active area or status filter.'
+              : 'No restaurant tables have been configured yet.'
+          }
+          actionLabel={
+            activeAreaFilter !== 'All' || activeStatusFilter !== 'All'
+              ? 'Clear Filters'
+              : 'Create New Table'
+          }
+          onAction={
+            activeAreaFilter !== 'All' || activeStatusFilter !== 'All'
+              ? () => {
+                  setActiveAreaFilter('All');
+                  setActiveStatusFilter('All');
+                }
+              : () => {
+                  setTableNumberInput(tables.length + 1);
+                  setCapacityInput(4);
+                  setAreaInput('Main Dining');
+                  setIsCreateModalOpen(true);
+                }
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {filteredTables.map((t) => {
+            const badge = getStatusBadge(t.status);
+            const isOccupied = ['OCCUPIED', 'WAITING_FOR_SERVICE', 'BILL_REQUESTED', 'occupied'].includes(t.status);
 
-          return (
-            <div
-              key={t.id}
-              className={`bg-white rounded-3xl p-5 border shadow-sm transition-all flex flex-col justify-between relative ${
-                !t.isActive
-                  ? 'opacity-50 border-stone-200 bg-stone-100'
-                  : isOccupied
-                  ? 'border-amber-300 shadow-amber-100/50'
-                  : 'border-stone-200/80 hover:border-amber-400'
-              }`}
-            >
-              <div>
-                {/* Header: Table Number & Status Badge */}
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <span className="font-black text-stone-900 text-lg block">Table #{t.tableNumber}</span>
-                    <span className="text-[11px] font-semibold text-stone-400 block">{t.area}</span>
+            return (
+              <div
+                key={t.id}
+                className={`bg-white rounded-3xl p-5 border shadow-sm transition-all flex flex-col justify-between relative ${
+                  !t.isActive
+                    ? 'opacity-50 border-stone-200 bg-stone-100'
+                    : isOccupied
+                    ? 'border-amber-300 shadow-amber-100/50'
+                    : 'border-stone-200/80 hover:border-amber-400'
+                }`}
+              >
+                <div>
+                  {/* Header: Table Number & Status Badge */}
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className="font-black text-stone-900 text-lg block">Table #{t.tableNumber}</span>
+                      <span className="text-[11px] font-semibold text-stone-400 block">{t.area}</span>
+                    </div>
+
+                    <span className={`text-[10px] px-2.5 py-1 rounded-xl font-black border ${badge.color}`}>
+                      {badge.label}
+                    </span>
                   </div>
 
-                  <span className={`text-[10px] px-2.5 py-1 rounded-xl font-black border ${badge.color}`}>
-                    {badge.label}
-                  </span>
-                </div>
+                  {/* Capacity & Session Details */}
+                  <div className="space-y-1.5 text-xs text-stone-600 mb-4 bg-stone-50 p-3 rounded-2xl border border-stone-100">
+                    <div className="flex justify-between">
+                      <span className="text-stone-400">Seating Capacity</span>
+                      <span className="font-extrabold text-stone-900">{t.capacity} Guests</span>
+                    </div>
 
-                {/* Capacity & Session Details */}
-                <div className="space-y-1.5 text-xs text-stone-600 mb-4 bg-stone-50 p-3 rounded-2xl border border-stone-100">
-                  <div className="flex justify-between">
-                    <span className="text-stone-400">Seating Capacity</span>
-                    <span className="font-extrabold text-stone-900">{t.capacity} Guests</span>
-                  </div>
-
-                  {isOccupied && (
-                    <>
-                      <div className="flex justify-between pt-1 border-t border-stone-200/60">
-                        <span className="text-stone-400">Active Guest</span>
-                        <span className="font-bold text-amber-900 truncate max-w-[110px]">
-                          {t.currentCustomerName || 'Guest'}
-                        </span>
-                      </div>
-
-                      {t.currentOrderTotal !== undefined && (
-                        <div className="flex justify-between">
-                          <span className="text-stone-400">Order Total</span>
-                          <span className="font-black text-stone-900">{formatCurrency(t.currentOrderTotal)}</span>
+                    {isOccupied && (
+                      <>
+                        <div className="flex justify-between pt-1 border-t border-stone-200/60">
+                          <span className="text-stone-400">Active Guest</span>
+                          <span className="font-bold text-amber-900 truncate max-w-[110px]">
+                            {t.currentCustomerName || 'Guest'}
+                          </span>
                         </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
 
-              {/* Actions Footer */}
-              <div className="pt-3 border-t border-stone-100 space-y-2">
-                <div className="grid grid-cols-2 gap-1.5">
-                  <Button
-                    onClick={() => openDetailsModal(t)}
-                    variant="outline"
-                    size="sm"
-                    className="text-[11px] font-bold py-1.5 rounded-xl border-stone-200"
-                  >
-                    <Eye className="w-3.5 h-3.5 mr-1 text-amber-600" /> Details
-                  </Button>
-
-                  <Button
-                    onClick={() => openQrModal(t)}
-                    variant="outline"
-                    size="sm"
-                    className="text-[11px] font-bold py-1.5 rounded-xl border-stone-200"
-                  >
-                    <QrCode className="w-3.5 h-3.5 mr-1 text-stone-700" /> View QR
-                  </Button>
+                        {t.currentOrderTotal !== undefined && (
+                          <div className="flex justify-between">
+                            <span className="text-stone-400">Order Total</span>
+                            <span className="font-black text-stone-900">{formatCurrency(t.currentOrderTotal)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-1 text-[11px]">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openEditModal(t)}
-                      className="text-stone-500 hover:text-stone-900 font-bold flex items-center"
+                {/* Actions Footer */}
+                <div className="pt-3 border-t border-stone-100 space-y-2">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <Button
+                      onClick={() => openDetailsModal(t)}
+                      variant="outline"
+                      size="sm"
+                      className="text-[11px] font-bold py-1.5 rounded-xl border-stone-200"
                     >
-                      <Edit className="w-3.5 h-3.5 mr-0.5" /> Edit
-                    </button>
-                    <button
-                      onClick={() => handleToggleDeactivate(t)}
-                      className={`font-bold flex items-center ${t.isActive ? 'text-rose-600' : 'text-emerald-600'}`}
+                      <Eye className="w-3.5 h-3.5 mr-1 text-amber-600" /> Details
+                    </Button>
+
+                    <Button
+                      onClick={() => openQrModal(t)}
+                      variant="outline"
+                      size="sm"
+                      className="text-[11px] font-bold py-1.5 rounded-xl border-stone-200"
                     >
-                      <Power className="w-3.5 h-3.5 mr-0.5" /> {t.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
+                      <QrCode className="w-3.5 h-3.5 mr-1 text-stone-700" /> View QR
+                    </Button>
                   </div>
 
-                  <button
-                    onClick={() => handleRegenerateQR(t)}
-                    className="text-amber-700 hover:text-amber-900 font-bold flex items-center"
-                    title="Regenerate QR Code Token"
-                  >
-                    <RefreshCw className="w-3 h-3 mr-0.5" /> Token
-                  </button>
+                  <div className="flex items-center justify-between pt-1 text-[11px]">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEditModal(t)}
+                        className="text-stone-500 hover:text-stone-900 font-bold flex items-center"
+                      >
+                        <Edit className="w-3.5 h-3.5 mr-0.5" /> Edit
+                      </button>
+                      <button
+                        onClick={() => requestToggleDeactivate(t)}
+                        className={`font-bold flex items-center ${t.isActive ? 'text-rose-600' : 'text-emerald-600'}`}
+                      >
+                        <Power className="w-3.5 h-3.5 mr-0.5" /> {t.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => requestRegenerateQR(t)}
+                      className="text-amber-700 hover:text-amber-900 font-bold flex items-center"
+                      title="Regenerate QR Code Token"
+                    >
+                      <RefreshCw className="w-3 h-3 mr-0.5" /> Token
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ---------------- MODAL 1: CREATE TABLE MODAL ---------------- */}
       <Modal
@@ -548,7 +614,11 @@ export default function AdminTablesPage() {
         title={`Table #${selectedTable?.tableNumber} Detailed Session Overview`}
       >
         {loadingDetails ? (
-          <LoadingSpinner label="Loading session, orders, requests, and bill data..." />
+          <div className="space-y-4 pt-2">
+            <Skeleton className="h-16 w-full rounded-2xl" />
+            <Skeleton className="h-28 w-full rounded-2xl" />
+            <Skeleton className="h-20 w-full rounded-2xl" />
+          </div>
         ) : selectedTable ? (
           <div className="space-y-4 pt-2 text-xs">
             {/* Session Info Card */}
@@ -686,6 +756,34 @@ export default function AdminTablesPage() {
           </div>
         )}
       </Modal>
+
+      {/* Confirmation Dialog: Toggle Deactivate/Activate */}
+      <ConfirmDialog
+        isOpen={isToggleConfirmOpen}
+        onClose={() => setIsToggleConfirmOpen(false)}
+        onConfirm={handleConfirmToggle}
+        title={tableToToggle?.isActive ? `Deactivate Table #${tableToToggle?.tableNumber}?` : `Activate Table #${tableToToggle?.tableNumber}?`}
+        description={
+          tableToToggle?.isActive
+            ? `Deactivating Table #${tableToToggle?.tableNumber} will mark it inactive. Guests will be prevented from scanning its QR code or placing orders.`
+            : `Reactivate Table #${tableToToggle?.tableNumber} to make it available for dining guests and orders.`
+        }
+        confirmText={tableToToggle?.isActive ? 'Deactivate Table' : 'Activate Table'}
+        variant={tableToToggle?.isActive ? 'danger' : 'primary'}
+        isLoading={toggleLoading}
+      />
+
+      {/* Confirmation Dialog: Regenerate QR Token */}
+      <ConfirmDialog
+        isOpen={isRegenerateConfirmOpen}
+        onClose={() => setIsRegenerateConfirmOpen(false)}
+        onConfirm={handleConfirmRegenerateQR}
+        title={`Regenerate QR for Table #${tableToRegenerate?.tableNumber}?`}
+        description={`This will invalidate the current QR token for Table #${tableToRegenerate?.tableNumber}. Any printed table tents or posters using the current QR code will stop working and must be reprinted.`}
+        confirmText="Regenerate Token"
+        variant="warning"
+        isLoading={regenerateLoading}
+      />
     </div>
   );
 }

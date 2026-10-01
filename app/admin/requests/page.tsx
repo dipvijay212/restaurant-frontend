@@ -2,14 +2,17 @@
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { PageHeader } from '../../../components/shared/PageHeader';
-import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
 import { requestsApi } from '../../../lib/api/requests';
 import { staffApi } from '../../../lib/api/staff';
 import { ServiceRequest, RequestStatus, RequestType } from '../../../types/notification';
 import { StaffMember } from '../../../types/staff';
 import { formatDateTime } from '../../../lib/utils';
 import { Button } from '../../../components/ui/Button';
-import { Toast } from '../../../components/ui/Toast';
+import { RequestsListSkeleton } from '../../../components/ui/Skeleton';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { EmptyState } from '../../../components/ui/EmptyState';
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { useToast } from '../../../components/ui/ToastProvider';
 import {
   Bell,
   CheckCircle2,
@@ -30,18 +33,22 @@ import {
 } from 'lucide-react';
 
 export default function AdminRequestsPage() {
+  const toast = useToast();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Cancellation confirm dialog
+  const [requestToCancel, setRequestToCancel] = useState<ServiceRequest | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [tableFilter, setTableFilter] = useState<string>('all');
-
-  // Toast
-  const [toastMessage, setToastMessage] = useState<{ title: string; message: string } | null>(null);
 
   // Live Timer tick state
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
@@ -53,38 +60,57 @@ export default function AdminRequestsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch Staff list & Subscribe to Requests
-  useEffect(() => {
-    async function loadStaff() {
-      try {
-        const staff = await staffApi.getStaffMembers();
-        setStaffList(staff);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    loadStaff();
-
+  const loadStaffAndRequests = useCallback(() => {
+    setError(null);
     setLoading(true);
-    const unsubscribe = requestsApi.subscribe((updatedReqs) => {
-      setRequests(updatedReqs);
-      setLoading(false);
-    });
 
-    return () => unsubscribe();
+    staffApi.getStaffMembers()
+      .then((staff) => setStaffList(staff))
+      .catch((err) => console.error('Staff load error:', err));
+
+    try {
+      const unsubscribe = requestsApi.subscribe((updatedReqs) => {
+        setRequests(updatedReqs);
+        setLoading(false);
+      });
+      return unsubscribe;
+    } catch (err: any) {
+      console.error('Requests subscription error:', err);
+      setError(err?.message || 'Unable to load service requests.');
+      setLoading(false);
+      return () => {};
+    }
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = loadStaffAndRequests();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [loadStaffAndRequests]);
 
   // Handlers
   const handleUpdateStatus = async (id: string, newStatus: RequestStatus) => {
     try {
+      setActionLoadingId(id);
       const updated = await requestsApi.updateRequestStatus(id, newStatus);
-      setToastMessage({
-        title: `Request ${newStatus.toUpperCase()}`,
-        message: `Updated service call for Table #${updated.tableNumber}`,
-      });
-    } catch (err) {
+      toast.success(`Request ${newStatus.toUpperCase()}: Table #${updated.tableNumber}`);
+      if (newStatus === 'CANCELLED') {
+        setRequestToCancel(null);
+      }
+    } catch (err: any) {
       console.error(err);
+      toast.error(err?.message || `Failed to update request to ${newStatus}`);
+    } finally {
+      setActionLoadingId(null);
+      setIsCancelling(false);
     }
+  };
+
+  const executeCancelRequest = async () => {
+    if (!requestToCancel) return;
+    setIsCancelling(true);
+    await handleUpdateStatus(requestToCancel.id, 'CANCELLED');
   };
 
   const handleAssignStaff = async (id: string, staffName: string) => {
@@ -96,12 +122,10 @@ export default function AdminRequestsPage() {
         member?.id,
         staffName || 'Staff Member'
       );
-      setToastMessage({
-        title: 'Staff Assigned',
-        message: `Assigned ${staffName} to Table #${updated.tableNumber}`,
-      });
-    } catch (err) {
+      toast.success(`Assigned ${staffName} to Table #${updated.tableNumber}`);
+    } catch (err: any) {
       console.error(err);
+      toast.error(err?.message || 'Failed to assign staff');
     }
   };
 
@@ -132,15 +156,9 @@ export default function AdminRequestsPage() {
         message: sampleMessages[chosenType],
       });
 
-      setToastMessage({
-        title: `New Service Request: ${chosenType.toUpperCase()}`,
-        message: `Table #${created.tableNumber} requested ${chosenType.toLowerCase()}`,
-      });
+      toast.info(`New request from Table #${created.tableNumber}: ${chosenType.toUpperCase()}`);
     } catch (err: any) {
-      setToastMessage({
-        title: 'Simulation Notice',
-        message: err.message || 'Request creation skipped.',
-      });
+      toast.error(err.message || 'Request creation skipped.');
     }
   };
 
@@ -213,18 +231,6 @@ export default function AdminRequestsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Toast Alert */}
-      {toastMessage && (
-        <div className="fixed top-20 right-4 z-50 max-w-sm">
-          <Toast
-            type="info"
-            title={toastMessage.title}
-            message={toastMessage.message}
-            onClose={() => setToastMessage(null)}
-          />
-        </div>
-      )}
-
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-200">
         <div>
@@ -344,14 +350,35 @@ export default function AdminRequestsPage() {
       </div>
 
       {/* Requests Feed List Grid */}
-      {loading ? (
-        <LoadingSpinner label="Connecting to live requests feed..." />
+      {error ? (
+        <ErrorState error={error} onRetry={() => { loadStaffAndRequests(); }} />
+      ) : loading ? (
+        <RequestsListSkeleton count={6} />
       ) : filteredRequests.length === 0 ? (
-        <div className="bg-white rounded-3xl p-12 text-center text-stone-500 border border-stone-200 shadow-sm">
-          <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-emerald-600" />
-          <h3 className="font-bold text-stone-900 text-lg">No Active Requests</h3>
-          <p className="text-xs text-stone-500">No service calls matching current filters.</p>
-        </div>
+        <EmptyState
+          icon={Bell}
+          title="No active requests."
+          description={
+            searchQuery || statusFilter !== 'all' || typeFilter !== 'all' || tableFilter !== 'all'
+              ? 'Try adjusting your search query or filters.'
+              : 'No service calls active at this time.'
+          }
+          actionLabel={
+            searchQuery || statusFilter !== 'all' || typeFilter !== 'all' || tableFilter !== 'all'
+              ? 'Clear Filters'
+              : undefined
+          }
+          onAction={
+            searchQuery || statusFilter !== 'all' || typeFilter !== 'all' || tableFilter !== 'all'
+              ? () => {
+                  setSearchQuery('');
+                  setStatusFilter('all');
+                  setTypeFilter('all');
+                  setTableFilter('all');
+                }
+              : undefined
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredRequests.map((req) => {
@@ -484,12 +511,13 @@ export default function AdminRequestsPage() {
                       <Button
                         onClick={() => handleUpdateStatus(req.id, 'ACCEPTED')}
                         variant="primary"
+                        isLoading={actionLoadingId === req.id}
                         className="w-full py-2.5 text-xs font-black rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 active:scale-95 shadow-sm"
                       >
                         Accept Call
                       </Button>
                       <Button
-                        onClick={() => handleUpdateStatus(req.id, 'CANCELLED')}
+                        onClick={() => setRequestToCancel(req)}
                         variant="outline"
                         className="py-2.5 px-3 text-xs font-bold rounded-xl text-stone-600 border-stone-300 hover:bg-stone-100"
                       >
@@ -503,12 +531,13 @@ export default function AdminRequestsPage() {
                       <Button
                         onClick={() => handleUpdateStatus(req.id, 'COMPLETED')}
                         variant="success"
+                        isLoading={actionLoadingId === req.id}
                         className="w-full py-2.5 text-xs font-black rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95 shadow-sm"
                       >
                         Mark Completed
                       </Button>
                       <Button
-                        onClick={() => handleUpdateStatus(req.id, 'CANCELLED')}
+                        onClick={() => setRequestToCancel(req)}
                         variant="outline"
                         className="py-2.5 px-3 text-xs font-bold rounded-xl text-stone-600 border-stone-300 hover:bg-stone-100"
                       >
@@ -534,6 +563,19 @@ export default function AdminRequestsPage() {
           })}
         </div>
       )}
+
+      {/* Cancel Request Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={!!requestToCancel}
+        title="Cancel Service Request"
+        message={`Are you sure you want to cancel the service request (${requestToCancel?.type.toUpperCase()}) for Table #${requestToCancel?.tableNumber}?`}
+        confirmLabel="Cancel Request"
+        cancelLabel="Keep Request"
+        variant="danger"
+        isLoading={isCancelling}
+        onCancel={() => setRequestToCancel(null)}
+        onConfirm={executeCancelRequest}
+      />
     </div>
   );
 }

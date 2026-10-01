@@ -6,6 +6,8 @@ import { orderSocketService } from '../../../lib/api/socketMock';
 import { Order, OrderStatus } from '../../../types/order';
 import { KitchenColumn } from '../../../components/kitchen/KitchenColumn';
 import { LoadingSpinner } from '../../../components/shared/LoadingSpinner';
+import { ErrorState } from '../../../components/shared/ErrorState';
+import { KdsColumnSkeleton } from '../../../components/ui/Skeleton';
 import { KitchenHeader } from '../../../components/kitchen/KitchenHeader';
 import { playKitchenChime } from '../../../lib/utils/sound';
 import { useAppDispatch } from '../../../store';
@@ -19,6 +21,7 @@ export default function KitchenOrdersPage() {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Layout & View State
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -39,11 +42,12 @@ export default function KitchenOrdersPage() {
   const fetchActiveTickets = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await ordersApi.getOrders();
       setOrders(data);
-    } catch (err) {
-      console.error('Failed to fetch active tickets:', err);
-    } fontFinally: {
+    } catch (err: any) {
+      setError(err.message || 'Unable to load kitchen tickets.');
+    } finally {
       setLoading(false);
     }
   }, []);
@@ -361,12 +365,24 @@ export default function KitchenOrdersPage() {
           </div>
         </div>
 
+        {/* Error Alert */}
+        {error && (
+          <ErrorState
+            title="Unable to load kitchen tickets"
+            message={error}
+            onRetry={fetchActiveTickets}
+            className="bg-stone-900 border-stone-800 text-stone-200"
+          />
+        )}
+
         {/* 3-Column KDS Board Grid */}
         {loading ? (
-          <div className="py-20">
-            <LoadingSpinner label="Connecting to kitchen display feed..." />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 flex-1 items-start">
+            <KdsColumnSkeleton />
+            <KdsColumnSkeleton />
+            <KdsColumnSkeleton />
           </div>
-        ) : (
+        ) : !error && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 flex-1 items-start">
             {/* Column 1: NEW */}
             <KitchenColumn

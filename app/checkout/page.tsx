@@ -6,17 +6,20 @@ import { CustomerHeader } from '../../components/customer/CustomerHeader';
 import { CustomerBottomNav } from '../../components/customer/CustomerBottomNav';
 import { BillSummary } from '../../components/customer/BillSummary';
 import { Button } from '../../components/ui/Button';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { useToast } from '../../components/ui/ToastProvider';
 import { useAppDispatch, useAppSelector } from '../../store';
 import { clearCart } from '../../store/slices/cartSlice';
 import { setCurrentOrderId, updateGuestInfo } from '../../store/slices/customerSessionSlice';
 import { ordersApi } from '../../lib/api/orders';
-import { CheckCircle2, Utensils, AlertTriangle, Building2, QrCode } from 'lucide-react';
+import { CheckCircle2, Utensils, AlertTriangle, Building2, QrCode, ShoppingBag } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 import { initialRestaurantData } from '../../mock/restaurant';
 
 export default function CheckoutPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const { toast } = useToast();
   const cart = useAppSelector((state) => state.cart);
   const session = useAppSelector((state) => state.customerSession);
 
@@ -88,10 +91,12 @@ export default function CheckoutPage() {
       // Successful placement: set order ID, clear cart, and navigate to tracking page
       dispatch(setCurrentOrderId(newOrder.id));
       dispatch(clearCart());
+      toast.success('Order placed successfully.', `Order #${newOrder.orderNumber} confirmed.`);
       router.push(`/orders/${newOrder.id}`);
     } catch (err: any) {
       // Submission failure: cart remains completely intact
       setErrorMessage('Unable to place your order. Please try again.');
+      toast.error('Order Placement Failed', 'Unable to place your order. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -104,16 +109,26 @@ export default function CheckoutPage() {
       <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4">
         <h1 className="text-xl font-bold text-stone-900 mb-4">Checkout & Confirm</h1>
 
-        {/* Error Alert Banner */}
-        {errorMessage && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-4 text-rose-900 text-xs flex gap-3 items-center animate-in fade-in">
-            <AlertTriangle className="w-5 h-5 flex-shrink-0 text-rose-600" />
-            <div>
-              <span className="font-bold block">Order Error</span>
-              <span>{errorMessage}</span>
-            </div>
-          </div>
-        )}
+        {cart.items.length === 0 ? (
+          <EmptyState
+            icon={ShoppingBag}
+            title="Your cart is empty"
+            description="Add some delicious items from our menu before proceeding to checkout."
+            actionLabel="Browse Menu"
+            onAction={() => router.push('/menu')}
+          />
+        ) : (
+          <>
+            {/* Error Alert Banner */}
+            {errorMessage && (
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-4 text-rose-900 text-xs flex gap-3 items-center animate-in fade-in">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 text-rose-600" />
+                <div>
+                  <span className="font-bold block">Order Error</span>
+                  <span>{errorMessage}</span>
+                </div>
+              </div>
+            )}
 
         <form onSubmit={handlePlaceOrder} className="space-y-4">
           {/* Restaurant & Table Info Card */}
@@ -222,6 +237,8 @@ export default function CheckoutPage() {
             <Utensils className="w-5 h-5 mr-2" /> Place Order ({formatCurrency(totalAmount)})
           </Button>
         </form>
+        </>
+      )}
       </main>
 
       <CustomerBottomNav />
